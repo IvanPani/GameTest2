@@ -1,33 +1,51 @@
-import Phaser from 'phaser'
+import Phaser from 'phaser';
 
-/**
- * Escena de fin de juego. Cuando se han recogido todas las estrellas, se presenta un
- * texto que indica que el juego se ha acabado.
- * Si se pulsa cualquier tecla, se vuelve a iniciar el juego.
- */
 export default class End extends Phaser.Scene {
-  /**
-   * Constructor de la escena
-   */
-  constructor() {
-    super({ key: 'end' });
-  }
+    constructor() {
+        super({ key: 'end' });
+    }
 
-  /**
-   * Creación de la escena. Tan solo contiene el texto que indica que el juego se ha acabado
-   */
-  create() {
-    this.add.text(500, 250, 'Se acabó!\nPulsa cualquier tecla para volver a jugar')
-        .setOrigin(0.5, 0.5)  // Colocamos el pivote en el centro de cuadro de texto 
-        .setAlign('center');  // Centramos el texto dentro del cuadro de texto
+    init(result) {
+        this.result = result;
+    }
 
-    // Añadimos el listener para cuando se haya pulsado una tecla. Es probable que no
-    // lleguemos a ver el mensaje porque veníamos con una tecla pulsada del juego (al 
-    // ir moviendo al jugador). Se puede mejorar añadiendo un temporizador que 
-    // añada este listener pasado un segundo
-    this.input.keyboard.on('keydown', function (_event) { 
-      this.scene.start('level');
-    }, this);
-  }
+    create() {
+        this.cameras.main.setBackgroundColor('#182b3d');
+        this.add.rectangle(200, 350, 340, 290, 0x102131, 0.98)
+            .setStrokeStyle(2, 0x49677c);
 
+        this.add.text(200, 260, 'RUN OVER', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '36px',
+            fontStyle: 'bold',
+            color: '#f3f6ed'
+        }).setOrigin(0.5);
+
+        this.add.text(200, 330, `Score  ${this.result.score}\nWeight  ${this.result.weight}`, {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '21px',
+            color: '#8fe0d4',
+            align: 'center',
+            lineSpacing: 12
+        }).setOrigin(0.5);
+
+        this.add.text(200, 430, 'TAP TO TRY AGAIN', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: '#ffcf70'
+        }).setOrigin(0.5);
+        this.add.text(200, 470, 'Press any key to restart', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '14px',
+            color: '#b8c7d2'
+        }).setOrigin(0.5);
+
+        this.input.on('pointerdown', this.restart, this);
+        this.input.keyboard?.once('keydown', this.restart, this);
+    }
+
+    restart() {
+        this.scene.start('level');
+    }
 }
