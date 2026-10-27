@@ -3,7 +3,7 @@ import Player from './player.js';
 
 const WIDTH = 400;
 const HEIGHT = 700;
-const PLAYER_Y = 520;
+const PLAYER_Y_RATIO = 0.23;
 const BASE_FALL_SPEED = 190;
 const FALL_SPEED_PER_WEIGHT = 22;
 const MAX_FALL_SPEED = 430;
@@ -21,7 +21,7 @@ export default class Level extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#182b3d');
         this.createShaft();
 
-        this.player = new Player(this, WIDTH / 2, PLAYER_Y);
+        this.player = new Player(this, WIDTH / 2, this.scale.height * PLAYER_Y_RATIO);
         this.player.setDepth(2);
         this.cursors = this.input.keyboard?.createCursorKeys();
         this.targetX = this.player.x;
