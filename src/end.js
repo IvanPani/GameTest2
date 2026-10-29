@@ -21,7 +21,7 @@ export default class End extends Phaser.Scene {
             color: '#f3f6ed'
         }).setOrigin(0.5);
 
-        this.add.text(200, 330, `Score  ${this.result.score}\nWeight  ${this.result.weight}`, {
+        this.add.text(200, 330, `Score  ${this.result.score}\nWeight  ${this.result.weight.toFixed(1)} kg`, {
             fontFamily: 'Arial, sans-serif',
             fontSize: '21px',
             color: '#8fe0d4',

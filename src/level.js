@@ -1,16 +1,21 @@
 import Phaser from 'phaser';
 import Player from './player.js';
+import { MOVEMENT, getWeight, getFallSpeed, getSpeedKmh, steer } from './movement.js';
 
 const WIDTH = 400;
 const HEIGHT = 700;
 const PLAYER_Y_RATIO = 0.23;
-const BASE_FALL_SPEED = 190;
-const FALL_SPEED_PER_WEIGHT = 22;
-const MAX_FALL_SPEED = 430;
-const BASE_STEERING_SPEED = 310;
-const MIN_STEERING_SPEED = 125;
-const STEERING_LOSS_PER_WEIGHT = 0.12;
-const DAMAGE_COOLDOWN = 900;
+const MAX_HEALTH = 3;
+// Distances in pixels: match the original spawn cadence at 190 px/s.
+const SPAWNING = Object.freeze({
+    firstObstacleDistance: 95,
+    firstButtonDistance: 152,
+    obstacleGapMin: 162,
+    obstacleGapMax: 247,
+    buttonGapMin: 190,
+    buttonGapMax: 295,
+    clearance: 24
+});
 
 export default class Level extends Phaser.Scene {
     constructor() {
@@ -25,24 +30,28 @@ export default class Level extends Phaser.Scene {
         this.player.setDepth(2);
         this.cursors = this.input.keyboard?.createCursorKeys();
         this.targetX = this.player.x;
+        this.steeringVelocity = 0;
+        this.pointerSteering = false;
         this.obstacles = [];
         this.collectibles = [];
         this.elapsed = 0;
-        this.obstacleTimer = 500;
-        this.collectibleTimer = 800;
+        this.obstacleDistance = SPAWNING.firstObstacleDistance;
+        this.collectibleDistance = SPAWNING.firstButtonDistance;
         this.damageTimer = 0;
         this.score = 0;
-        this.weight = 0;
-        this.health = 3;
+        this.weight = getWeight(this.score);
+        this.health = MAX_HEALTH;
 
         this.createHud();
 
         this.input.on('pointerdown', (pointer) => {
             this.targetX = pointer.x;
+            this.pointerSteering = true;
         });
         this.input.on('pointermove', (pointer) => {
             if (pointer.isDown) {
                 this.targetX = pointer.x;
+                this.pointerSteering = true;
             }
         });
     }
@@ -69,9 +78,30 @@ export default class Level extends Phaser.Scene {
 
     createHud() {
         this.add.rectangle(WIDTH / 2, 48, WIDTH, 96, 0x102131, 0.96).setDepth(10);
-        this.scoreText = this.add.text(18, 17, '', this.hudStyle(18, '#f3f6ed')).setDepth(11);
-        this.weightText = this.add.text(18, 47, '', this.hudStyle(15, '#8fe0d4')).setDepth(11);
-        this.healthText = this.add.text(18, 73, '', this.hudStyle(14, '#ffb4a2')).setDepth(11);
+        this.add.text(12, 15, 'Fabric', this.hudStyle(15, '#f3f6ed')).setDepth(11);
+        this.hearts = Array.from({ length: MAX_HEALTH }, (_, index) => {
+            const heart = this.add.graphics({ x: 22 + index * 24, y: 56 }).setDepth(11);
+            // Draw hearts as geometry so they stay red on every platform/font.
+            const points = Array.from({ length: 48 }, (_, point) => {
+                const angle = point / 48 * Math.PI * 2;
+                return {
+                    x: 16 * Math.sin(angle) ** 3 * 0.6,
+                    y: -(13 * Math.cos(angle) - 5 * Math.cos(2 * angle)
+                        - 2 * Math.cos(3 * angle) - Math.cos(4 * angle)) * 0.6
+                };
+            });
+            heart.fillStyle(0xef4444, 1);
+            heart.fillPoints(points, true);
+            return heart;
+        });
+        this.add.text(WIDTH - 12, 15, 'Score', this.hudStyle(15, '#f3f6ed'))
+            .setOrigin(1, 0).setDepth(11);
+        this.scoreText = this.add.text(WIDTH - 12, 45, '', this.hudStyle(22, '#f3f6ed'))
+            .setOrigin(1, 0).setDepth(11);
+        this.weightText = this.add.text(WIDTH / 2, 18, '', this.hudStyle(14, '#8fe0d4'))
+            .setOrigin(0.5, 0).setDepth(11);
+        this.speedText = this.add.text(WIDTH / 2, 49, '', this.hudStyle(14, '#8fe0d4'))
+            .setOrigin(0.5, 0).setDepth(11);
         this.updateHud();
     }
 
@@ -85,19 +115,19 @@ export default class Level extends Phaser.Scene {
     }
 
     updateHud() {
-        const fallSpeed = Math.min(
-            BASE_FALL_SPEED + this.weight * FALL_SPEED_PER_WEIGHT,
-            MAX_FALL_SPEED
-        );
-        this.scoreText.setText(`SCORE  ${this.score}`);
-        this.weightText.setText(`WEIGHT  ${this.weight}   |   FALL  ${fallSpeed}`);
-        this.healthText.setText(`FABRIC  ${this.health} / 3`);
+        this.scoreText.setText(`${this.score}`);
+        this.weightText.setText(`Weight  ${this.weight.toFixed(1)} kg`);
+        this.speedText.setText(`Speed  ${getSpeedKmh(this.score).toFixed(1)} km/h`);
+        this.hearts.forEach((heart, index) => {
+            heart.setAlpha(index < this.health ? 1 : 0.2);
+        });
     }
 
     spawnObstacle() {
         const width = Phaser.Math.Between(48, 86);
         const height = Phaser.Math.Between(24, 38);
-        const x = Phaser.Math.Between(58 + width / 2, WIDTH - 58 - width / 2);
+        const x = this.findSpawnX(width, height, HEIGHT + height, 58 + width / 2, WIDTH - 58 - width / 2);
+        if (x === null) return;
         const shape = this.add.rectangle(
             x,
             HEIGHT + height,
@@ -109,7 +139,8 @@ export default class Level extends Phaser.Scene {
     }
 
     spawnCollectible() {
-        const x = Phaser.Math.Between(54, WIDTH - 54);
+        const x = this.findSpawnX(34, 34, HEIGHT + 24, 54, WIDTH - 54);
+        if (x === null) return;
         const coin = this.add.circle(0, 0, 15, 0xf2c14e).setStrokeStyle(3, 0xffe7a1);
         const mark = this.add.text(0, 0, '+', {
             fontFamily: 'Arial, sans-serif',
@@ -130,18 +161,15 @@ export default class Level extends Phaser.Scene {
 
         this.movePlayer(seconds);
 
-        const fallSpeed = Math.min(
-            BASE_FALL_SPEED + this.weight * FALL_SPEED_PER_WEIGHT,
-            MAX_FALL_SPEED
-        );
+        const fallSpeed = getFallSpeed(this.score);
         this.scrollShaft(fallSpeed * seconds);
-        this.updateSpawns(delta);
         this.moveObjects(fallSpeed * seconds);
+        this.updateSpawns(fallSpeed * seconds);
 
         if (this.damageTimer === 0) {
             this.player.setAlpha(1);
         } else {
-            this.player.setAlpha(Math.floor(this.elapsed / 100) % 2 === 0 ? 0.45 : 1);
+            this.player.setAlpha(Math.floor(this.damageTimer / MOVEMENT.blinkIntervalMs) % 2 === 0 ? MOVEMENT.blinkAlpha : 1);
         }
     }
 
@@ -149,22 +177,33 @@ export default class Level extends Phaser.Scene {
         const left = this.cursors?.left.isDown;
         const right = this.cursors?.right.isDown;
         const direction = left === right ? 0 : (left ? -1 : 1);
-        const steeringSpeed = Math.max(
-            BASE_STEERING_SPEED / (1 + this.weight * STEERING_LOSS_PER_WEIGHT),
-            MIN_STEERING_SPEED
-        );
-
         if (direction !== 0) {
-            this.player.x += direction * steeringSpeed * seconds;
-            this.targetX = this.player.x;
-        } else {
-            const difference = this.targetX - this.player.x;
-            const step = Math.min(Math.abs(difference), steeringSpeed * seconds);
-            this.player.x += Math.sign(difference) * step;
+            this.pointerSteering = false;
         }
 
-        this.player.x = Phaser.Math.Clamp(this.player.x, 42, WIDTH - 42);
         this.targetX = Phaser.Math.Clamp(this.targetX, 42, WIDTH - 42);
+        const difference = this.targetX - this.player.x;
+        const targetVelocity = direction !== 0
+            ? direction * MOVEMENT.steeringSpeed
+            : (this.pointerSteering ? Math.sign(difference) * MOVEMENT.steeringSpeed : 0);
+        const movement = steer(this.steeringVelocity, targetVelocity, this.weight, seconds);
+        this.steeringVelocity = movement.velocity;
+
+        // A pointer selects a destination: stop there rather than oscillating around it.
+        if (this.pointerSteering && direction === 0
+            && (difference === 0 || (Math.sign(movement.distance) === Math.sign(difference)
+                && Math.abs(movement.distance) >= Math.abs(difference)))) {
+            this.player.x = this.targetX;
+            this.steeringVelocity = 0;
+        } else {
+            this.player.x += movement.distance;
+        }
+
+        const boundedX = Phaser.Math.Clamp(this.player.x, 42, WIDTH - 42);
+        if (boundedX !== this.player.x) {
+            this.steeringVelocity = 0;
+        }
+        this.player.x = boundedX;
     }
 
     scrollShaft(distance) {
@@ -177,17 +216,30 @@ export default class Level extends Phaser.Scene {
         }
     }
 
-    updateSpawns(delta) {
-        this.obstacleTimer -= delta;
-        this.collectibleTimer -= delta;
-
-        if (this.obstacleTimer <= 0) {
-            this.spawnObstacle();
-            this.obstacleTimer = Phaser.Math.Between(850, 1300);
+    findSpawnX(width, height, y, minX, maxX) {
+        // Keep buttons out of hazards, including hazards spawned beside existing buttons.
+        const candidates = [];
+        const objects = [...this.obstacles, ...this.collectibles];
+        for (let x = Math.ceil(minX); x <= Math.floor(maxX); x += 1) {
+            const clear = objects.every((object) =>
+                Math.abs(object.shape.y - y) >= (object.height + height) / 2 + SPAWNING.clearance
+                || Math.abs(object.shape.x - x) >= (object.width + width) / 2 + SPAWNING.clearance);
+            if (clear) candidates.push(x);
         }
-        if (this.collectibleTimer <= 0) {
+        return candidates.length ? candidates[Phaser.Math.Between(0, candidates.length - 1)] : null;
+    }
+
+    updateSpawns(distance) {
+        this.obstacleDistance -= distance;
+        this.collectibleDistance -= distance;
+
+        if (this.obstacleDistance <= 0) {
+            this.spawnObstacle();
+            this.obstacleDistance = Phaser.Math.Between(SPAWNING.obstacleGapMin, SPAWNING.obstacleGapMax);
+        }
+        if (this.collectibleDistance <= 0) {
             this.spawnCollectible();
-            this.collectibleTimer = Phaser.Math.Between(1000, 1550);
+            this.collectibleDistance = Phaser.Math.Between(SPAWNING.buttonGapMin, SPAWNING.buttonGapMax);
         }
     }
 
@@ -201,7 +253,7 @@ export default class Level extends Phaser.Scene {
                 this.obstacles.splice(index, 1);
                 if (this.damageTimer === 0) {
                     this.health -= 1;
-                    this.damageTimer = DAMAGE_COOLDOWN;
+                    this.damageTimer = MOVEMENT.damageInvulnerabilityMs;
                     this.updateHud();
                     if (this.health <= 0) {
                         this.scene.start('end', { score: this.score, weight: this.weight });
@@ -222,7 +274,7 @@ export default class Level extends Phaser.Scene {
                 collectible.shape.destroy();
                 this.collectibles.splice(index, 1);
                 this.score += 1;
-                this.weight += 1;
+                this.weight = getWeight(this.score);
                 this.updateHud();
             } else if (collectible.shape.y < -collectible.height) {
                 collectible.shape.destroy();
