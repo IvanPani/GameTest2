@@ -15,14 +15,14 @@ export default class End extends Phaser.Scene {
             .setStrokeStyle(2, 0x49677c);
 
         this.add.text(200, 260, 'RUN OVER', {
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: 'Fredoka, sans-serif',
             fontSize: '36px',
             fontStyle: 'bold',
             color: '#f3f6ed'
         }).setOrigin(0.5);
 
         this.add.text(200, 330, `Score  ${this.result.score}\nWeight  ${this.result.weight.toFixed(1)} kg`, {
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: 'Fredoka, sans-serif',
             fontSize: '21px',
             color: '#8fe0d4',
             align: 'center',
@@ -30,13 +30,13 @@ export default class End extends Phaser.Scene {
         }).setOrigin(0.5);
 
         this.add.text(200, 430, 'TAP TO TRY AGAIN', {
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: 'Fredoka, sans-serif',
             fontSize: '18px',
             fontStyle: 'bold',
             color: '#ffcf70'
         }).setOrigin(0.5);
         this.add.text(200, 470, 'Press any key to restart', {
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: 'Fredoka, sans-serif',
             fontSize: '14px',
             color: '#b8c7d2'
         }).setOrigin(0.5);

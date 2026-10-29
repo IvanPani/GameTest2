@@ -1,3 +1,19 @@
+@font-face {
+  font-family: 'DynaPuff';
+  src: url('../assets/fonts/dynapuff/DynaPuff-Variable.ttf') format('truetype');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Fredoka';
+  src: url('../assets/fonts/fredoka/Fredoka-Variable.ttf') format('truetype');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -12,10 +28,11 @@ body {
   padding: 14px 12px 24px;
   background: #101c29;
   color: #f3f6ed;
-  font-family: Arial, sans-serif;
+  font-family: 'Fredoka', sans-serif;
 }
 
 h1 {
+  font-family: 'DynaPuff', sans-serif;
   margin: 4px 0 6px;
   text-align: center;
   font-size: 24px;

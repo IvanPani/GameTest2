@@ -1,13 +1,13 @@
 // Movement units are pixels and seconds; damage/blink durations are milliseconds.
 export const MOVEMENT = Object.freeze({
     // Fantasy speed shown at the starting gameplay speed; display only.
-    displayedBaseSpeedKmh: 10,
+    displayedBaseSpeedKmh: 30,
     baseFallSpeed: 190,
-    fallSpeedPerButton: 1.6,
+    fallSpeedPerButton: 2.0,
     weightPerButton: 0.6,
     steeringSpeed: 310,
     // Response time grows linearly with weight (seconds per kg).
-    steeringDelayPerWeight: 0.05,
+    steeringDelayPerWeight: 0.035,
     damageInvulnerabilityMs: 2000,
     blinkIntervalMs: 100,
     blinkAlpha: 0.45

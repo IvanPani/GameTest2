@@ -23,4 +23,18 @@ const config = {
     }
 };
 
-new Phaser.Game(config);
+// Canvas text must be created after the local font finishes loading.
+async function startGame() {
+    try {
+        await Promise.all([
+            document.fonts.load('400 16px Fredoka'),
+            document.fonts.load('700 16px Fredoka'),
+            document.fonts.load('700 24px DynaPuff')
+        ]);
+    } catch (error) {
+        console.warn('Custom fonts could not load; using fallback fonts.', error);
+    }
+    new Phaser.Game(config);
+}
+
+startGame();

@@ -6,6 +6,8 @@ const WIDTH = 400;
 const HEIGHT = 700;
 const PLAYER_Y_RATIO = 0.23;
 const MAX_HEALTH = 3;
+// Background moves more slowly than hazards to give the tunnel depth.
+const BACKGROUND_SCROLL_RATIO = 0.02;
 // Distances in pixels: match the original spawn cadence at 190 px/s.
 const SPAWNING = Object.freeze({
     firstObstacleDistance: 95,
@@ -57,23 +59,15 @@ export default class Level extends Phaser.Scene {
     }
 
     createShaft() {
-        this.add.rectangle(12, HEIGHT / 2, 24, HEIGHT, 0x263c50);
-        this.add.rectangle(WIDTH - 12, HEIGHT / 2, 24, HEIGHT, 0x263c50);
-        this.add.rectangle(27, HEIGHT / 2, 3, HEIGHT, 0x49677c);
-        this.add.rectangle(WIDTH - 27, HEIGHT / 2, 3, HEIGHT, 0x49677c);
-
-        this.shaftDetails = [];
-        for (let y = 100; y < HEIGHT + 100; y += 100) {
-            const detail = this.add.rectangle(WIDTH / 2, y, WIDTH - 64, 2, 0x31485b, 0.8);
-            this.shaftDetails.push({ shape: detail, y });
-        }
-
-        this.add.text(WIDTH / 2, 112, 'WASHER SHAFT', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '12px',
-            color: '#8da5b5',
-            letterSpacing: 3
-        }).setOrigin(0.5);
+        const texture = this.textures.get('washing-machine-background').getSourceImage();
+        const scale = Math.max(WIDTH / texture.width, HEIGHT / texture.height);
+        this.backgroundHeight = texture.height * scale;
+        this.background = this.add.image(WIDTH / 2, 0, 'washing-machine-background')
+            .setOrigin(0.5, 0)
+            .setScale(scale)
+            .setDepth(-2);
+        this.backgroundOffset = 0;
+        this.backgroundMaxOffset = Math.max(0, this.backgroundHeight - HEIGHT);
     }
 
     createHud() {
@@ -107,7 +101,7 @@ export default class Level extends Phaser.Scene {
 
     hudStyle(size, color) {
         return {
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: 'Fredoka, sans-serif',
             fontSize: `${size}px`,
             fontStyle: 'bold',
             color
@@ -124,32 +118,31 @@ export default class Level extends Phaser.Scene {
     }
 
     spawnObstacle() {
-        const width = Phaser.Math.Between(48, 86);
-        const height = Phaser.Math.Between(24, 38);
-        const x = this.findSpawnX(width, height, HEIGHT + height, 58 + width / 2, WIDTH - 58 - width / 2);
+        const frames = ['small', 'medium', 'large'];
+        const frame = frames[Phaser.Math.Between(0, frames.length - 1)];
+        const textureFrame = this.textures.getFrame('soap', frame);
+        const size = Phaser.Math.Between(54, 80);
+        const scale = size / Math.max(textureFrame.width, textureFrame.height);
+        const displayWidth = textureFrame.width * scale;
+        const displayHeight = textureFrame.height * scale;
+        const angle = Phaser.Math.Between(0, 359);
+        const radians = Phaser.Math.DegToRad(angle);
+        // Rotated bounds are shared by spawn spacing and collision detection.
+        const width = Math.abs(Math.cos(radians)) * displayWidth + Math.abs(Math.sin(radians)) * displayHeight;
+        const height = Math.abs(Math.sin(radians)) * displayWidth + Math.abs(Math.cos(radians)) * displayHeight;
+        const x = this.findSpawnX(width, height, HEIGHT + height, 42 + width / 2, WIDTH - 42 - width / 2);
         if (x === null) return;
-        const shape = this.add.rectangle(
-            x,
-            HEIGHT + height,
-            width,
-            height,
-            0xd66b59
-        ).setStrokeStyle(3, 0xf6b078).setDepth(1);
+        const shape = this.add.image(x, HEIGHT + height, 'soap', frame)
+            .setScale(scale).setAngle(angle).setDepth(1);
         this.obstacles.push({ shape, width, height });
     }
 
     spawnCollectible() {
         const x = this.findSpawnX(34, 34, HEIGHT + 24, 54, WIDTH - 54);
         if (x === null) return;
-        const coin = this.add.circle(0, 0, 15, 0xf2c14e).setStrokeStyle(3, 0xffe7a1);
-        const mark = this.add.text(0, 0, '+', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '18px',
-            fontStyle: 'bold',
-            color: '#76521b'
-        }).setOrigin(0.5);
-        const shape = this.add.container(x, HEIGHT + 24, [coin, mark])
-            .setSize(34, 34)
+        const shape = this.add.image(x, HEIGHT + 24, 'button')
+            .setDisplaySize(38, 38)
+            .setAngle(Phaser.Math.Between(0, 359))
             .setDepth(1);
         this.collectibles.push({ shape, width: 34, height: 34 });
     }
@@ -207,13 +200,13 @@ export default class Level extends Phaser.Scene {
     }
 
     scrollShaft(distance) {
-        for (const detail of this.shaftDetails) {
-            detail.y -= distance;
-            if (detail.y < 145) {
-                detail.y += 800;
-            }
-            detail.shape.y = detail.y;
-        }
+        // This biome is a single illustration, not a seamless repeating texture.
+        // Hold its final view until a future biome/tutorial transition takes over.
+        this.backgroundOffset = Math.min(
+            this.backgroundOffset + distance * BACKGROUND_SCROLL_RATIO,
+            this.backgroundMaxOffset
+        );
+        this.background.y = -this.backgroundOffset;
     }
 
     findSpawnX(width, height, y, minX, maxX) {
@@ -275,6 +268,7 @@ export default class Level extends Phaser.Scene {
                 this.collectibles.splice(index, 1);
                 this.score += 1;
                 this.weight = getWeight(this.score);
+                this.player.setButtonCount(this.score);
                 this.updateHud();
             } else if (collectible.shape.y < -collectible.height) {
                 collectible.shape.destroy();
@@ -284,7 +278,7 @@ export default class Level extends Phaser.Scene {
     }
 
     overlapsPlayer(object) {
-        return Math.abs(object.shape.x - this.player.x) < object.width / 2 + 18
-            && Math.abs(object.shape.y - this.player.y) < object.height / 2 + 24;
+        return Math.abs(object.shape.x - this.player.x) < object.width / 2 + this.player.collisionHalfWidth
+            && Math.abs(object.shape.y - this.player.y) < object.height / 2 + this.player.collisionHalfHeight;
     }
 }
