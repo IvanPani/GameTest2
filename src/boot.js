@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getFrameMask } from './silhouette-collision.js';
 
 const FALL_ANIMATION_FPS = 8;
 
@@ -42,6 +43,11 @@ export default class Boot extends Phaser.Scene {
             repeat: -1
         });
         }
+        // Cache source silhouettes once, before gameplay (not on every collision).
+        const stages = this.textures.get('white-sock-stages');
+        for (let frame = 0; frame < 30; frame += 1) getFrameMask(stages.get(frame));
+        for (const name of ['small', 'medium', 'large']) getFrameMask(soap.get(name));
+        getFrameMask(this.textures.getFrame('button'));
         this.scene.start('level');
     }
 }

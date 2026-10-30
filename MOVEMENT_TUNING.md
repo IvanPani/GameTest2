@@ -40,6 +40,12 @@ The pile-up was caused by time-based spawning combined with a reduction from 190
 
 ## Sock fullness and object sprites
 
-`src/player.js` → `SOCK_VISUALS` holds the visual scale (0.14), stage thresholds (`stageButtons`: 0, 10, 25, 50, 100 buttons), and collision half-widths (18, 20, 23, 26, 29 px). Each of the five rows in `Sprite_Sheet_White_Sock_Stages.png` supplies six animation frames; `src/boot.js` registers the five animations at 8 FPS. The final appearance stays at stage five while speed and weight keep scaling without a cap. Every new run starts empty.
+`src/player.js` → `SOCK_VISUALS` holds the visual scale (0.14), stage thresholds (`stageButtons`: 0, 10, 25, 50, 100 buttons), and visual scale. Each of the five rows in `Sprite_Sheet_White_Sock_Stages.png` supplies six animation frames; `src/boot.js` registers the five animations at 8 FPS. The final appearance stays at stage five while speed and weight keep scaling without a cap. Every new run starts empty.
 
-`src/level.js` → `spawnCollectible()` uses `button.png` (38 px display size, 34 px pickup bounds). `spawnObstacle()` selects one of three soap clusters, sizes it to 54–80 px, and randomly rotates it 0–359 degrees. These are fixed random orientations, not continuous spinning. Rotated bounding boxes drive collisions and spacing. `src/boot.js` defines the three named soap frames from `soap.png`.
+`src/level.js` → `spawnCollectible()` uses `button.png` (38 px display size, 34 px pickup bounds). `spawnObstacle()` selects one of three soap clusters, sizes it to 54–80 px, and randomly rotates it 0–359 degrees. These are fixed random orientations, not continuous spinning. Rotated bounding boxes drive spawn spacing; visible silhouettes drive actual collisions. `src/boot.js` defines the three named soap frames from `soap.png`.
+
+## Silhouette collisions
+
+`src/silhouette-collision.js` replaces rectangular hitboxes for soap, sock and buttons. Cached alpha masks come from each texture frame; checks include rotation, scale, parent-container position and sprite flips. Sock masks follow the current animation frame and fullness stage. Disconnected soap pieces and their transparent gaps remain separate. Invulnerability blinking does not affect masks.
+
+`COLLISION_ALPHA_THRESHOLD` (64 out of 255) ignores faint transparent edge pixels. Increase it to make edge contacts more forgiving. `COLLISION_SAMPLE_STEP` (0.5 game pixels) controls contact sampling accuracy; smaller values cost more CPU. Accuracy is subpixel sampled rather than mathematically exact polygon contact. Rectangle overlap is only a broad-phase rejection. `src/boot.js` warms the masks before gameplay; no texture readback is performed during collision checks. Old manually configured sock collision widths were removed.

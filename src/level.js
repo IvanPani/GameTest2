@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import Player from './player.js';
+import { silhouettesOverlap } from './silhouette-collision.js';
 import { MOVEMENT, getWeight, getFallSpeed, getSpeedKmh, steer } from './movement.js';
 
 const WIDTH = 400;
@@ -127,7 +128,7 @@ export default class Level extends Phaser.Scene {
         const displayHeight = textureFrame.height * scale;
         const angle = Phaser.Math.Between(0, 359);
         const radians = Phaser.Math.DegToRad(angle);
-        // Rotated bounds are shared by spawn spacing and collision detection.
+        // Rotated bounds keep spawns apart; silhouette masks decide actual contact.
         const width = Math.abs(Math.cos(radians)) * displayWidth + Math.abs(Math.sin(radians)) * displayHeight;
         const height = Math.abs(Math.sin(radians)) * displayWidth + Math.abs(Math.cos(radians)) * displayHeight;
         const x = this.findSpawnX(width, height, HEIGHT + height, 42 + width / 2, WIDTH - 42 - width / 2);
@@ -278,7 +279,6 @@ export default class Level extends Phaser.Scene {
     }
 
     overlapsPlayer(object) {
-        return Math.abs(object.shape.x - this.player.x) < object.width / 2 + this.player.collisionHalfWidth
-            && Math.abs(object.shape.y - this.player.y) < object.height / 2 + this.player.collisionHalfHeight;
+        return silhouettesOverlap(this.player.sock, object.shape);
     }
 }

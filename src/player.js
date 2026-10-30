@@ -3,9 +3,7 @@ import Phaser from 'phaser';
 export const SOCK_VISUALS = Object.freeze({
     scale: 0.14,
     // One threshold per animation row, starting with the empty sock.
-    stageButtons: [0, 10, 25, 50, 100],
-    collisionHalfWidths: [18, 20, 23, 26, 29],
-    collisionHalfHeight: 24
+    stageButtons: [0, 10, 25, 50, 100]
 });
 
 export default class Player extends Phaser.GameObjects.Container {
@@ -28,8 +26,6 @@ export default class Player extends Phaser.GameObjects.Container {
         if (stage === this.stage) return;
         this.stage = stage;
         this.sock.play(`white-sock-stage-${stage}`);
-        this.collisionHalfWidth = SOCK_VISUALS.collisionHalfWidths[stage];
-        this.collisionHalfHeight = SOCK_VISUALS.collisionHalfHeight;
-        this.setSize(this.collisionHalfWidth * 2, this.collisionHalfHeight * 2);
+        this.setSize(this.sock.displayWidth, this.sock.displayHeight);
     }
 }
