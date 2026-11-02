@@ -22,8 +22,8 @@ export function getFallSpeed(buttons) {
 }
 
 // Exact exponential response and integrated travel: independent of frame rate.
-export function steer(velocity, targetVelocity, weight, seconds) {
-    const delay = weight * MOVEMENT.steeringDelayPerWeight;
+export function steer(velocity, targetVelocity, weight, seconds, delayMultiplier = 1) {
+    const delay = weight * MOVEMENT.steeringDelayPerWeight * delayMultiplier;
     if (delay === 0) {
         return { velocity: targetVelocity, distance: targetVelocity * seconds };
     }

@@ -35,21 +35,21 @@ test('score banks once across reloads, and a new run has no inherited weight', (
 test('purchases and style survive a new service; invalid transactions change nothing', () => {
     const f = fixture();
     const p = f.open();
-    p.completeRun(p.beginRun(), 100);
-    assert.equal(p.purchaseUpgrade('fabric', { costs: [20] }), true);
-    assert.equal(p.purchaseUpgrade('fabric', { costs: [20] }), false);
-    assert.equal(p.purchaseUnlock('patterns', 'stripes', 30), true);
-    assert.equal(p.purchaseUnlock('patterns', 'stripes', 30), false);
+    p.completeRun(p.beginRun(), 1080);
+    assert.equal(p.purchaseUpgrade('fabric'), true);
+    assert.equal(p.purchaseUpgrade('fabric'), false);
+    assert.equal(p.purchaseUnlock('patterns', 'chevrons', 30), true);
+    assert.equal(p.purchaseUnlock('patterns', 'chevrons', 30), false);
     assert.equal(p.purchaseUnlock('colors', '#123456', 10), true);
     assert.equal(p.purchaseUnlock('cosmetics', 'bow', 10), true);
-    assert.equal(p.selectStyle({ patternId: 'stripes', bodyColor: '#123456' }), true);
+    assert.equal(p.selectStyle({ patternId: 'chevrons', bodyColor: '#123456' }), true);
     assert.equal(p.selectStyle({ patternId: 'locked' }), false);
     assert.equal(p.purchaseUnlock('cosmetics', 'crown', 99), false);
     const saved = f.open().load();
     assert.equal(saved.currency, 30);
     assert.equal(saved.upgrades.fabric, 1);
     assert.equal(saved.sockStyle.bodyColor, '#123456');
-    assert.equal(saved.sockStyle.patternId, 'stripes');
+    assert.equal(saved.sockStyle.patternId, 'chevrons');
     assert.deepEqual(saved.unlocks.cosmetics, ['bow']);
 });
 
@@ -84,7 +84,7 @@ test('corrupt and future saves are preserved; malformed fields are validated', (
     assert.equal(saved.currency, 0);
     assert.equal(saved.upgrades.fabric, 0);
     assert.equal(saved.sockStyle.patternId, 'plain');
-    assert.deepEqual(saved.unlocks.patterns, ['plain', 'dots']);
+    assert.deepEqual(saved.unlocks.patterns, ['plain', 'dots', 'stripes']);
 });
 
 test('unavailable and full storage do not crash, and display a save error', () => {

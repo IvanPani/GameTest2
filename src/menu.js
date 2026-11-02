@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { playerData } from './player-data.js';
+import { UPGRADES, getRunStats } from './upgrades.js';
+import { getUpgradeProgress } from './upgrade-progress.js';
 import { SOCK_VISUALS } from './player.js';
 import { CUSTOM_SOCK_TEXTURE, applySockStyle } from './sock-skin.js';
 
@@ -8,11 +10,12 @@ const HEIGHT = 700;
 const LOCATIONS = Object.freeze({
     main: { x: 0, y: 0 },
     customize: { x: 0, y: -HEIGHT },
-    upgrades: { x: -WIDTH, y: 0 }
+    upgrades: { x: -WIDTH, y: 0 },
+    records: { x: WIDTH, y: 0 }
 });
 const TEXT = { fontFamily: 'Fredoka, sans-serif', fontStyle: 'bold', color: '#f3f6ed' };
 
-// One spatial hub, one profile: the camera travels between three placeholder rooms.
+// One spatial hub, one profile: the camera travels between the laundry rooms.
 export default class Menu extends Phaser.Scene {
     constructor() { super({ key: 'menu' }); }
 
@@ -26,20 +29,21 @@ export default class Menu extends Phaser.Scene {
         this.createMain();
         this.createCustomize();
         this.createUpgrades();
+        this.createRecords();
 
         this.add.rectangle(200, 30, WIDTH, 60, 0x102131, 0.97).setScrollFactor(0).setDepth(10);
-        this.add.text(384, 20, `CURRENCY  ${playerData.getProfile().currency}`, {
+        this.currencyText = this.add.text(384, 20, `CURRENCY  ${playerData.getProfile().currency}`, {
             ...TEXT, fontSize: '22px'
         }).setOrigin(1, 0).setScrollFactor(0).setDepth(11);
-        if (playerData.saveError) this.add.text(200, 642, playerData.saveError, {
+        this.saveWarning = this.add.text(200, 675, playerData.saveError || '', {
             ...TEXT, fontSize: '16px', color: '#ffcf70', align: 'center', wordWrap: { width: 350 }
         }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
 
         const keys = {
             UP: () => this.navigate('customize'),
-            LEFT: () => this.navigate('upgrades'),
+            LEFT: () => this.navigate(this.location === 'records' ? 'main' : 'upgrades'),
             DOWN: () => { if (this.location === 'customize') this.navigate('main'); },
-            RIGHT: () => { if (this.location === 'upgrades') this.navigate('main'); },
+            RIGHT: () => this.navigate(this.location === 'upgrades' ? 'main' : 'records'),
             ESC: () => this.navigate('main'),
             ENTER: () => this.startRun(),
             SPACE: () => this.startRun()
@@ -50,7 +54,7 @@ export default class Menu extends Phaser.Scene {
             for (const [key, handler] of Object.entries(keys)) this.input.keyboard?.off(`keydown-${key}`, handler);
             camera.off('camerapancomplete', this.finishNavigation, this);
         });
-        this.refreshControls();
+        this.updateShop();
     }
 
     room(id, color, heading, subtitle) {
@@ -108,7 +112,9 @@ export default class Menu extends Phaser.Scene {
         this.mainSock = this.sock(panel, 58, 383, 0.65);
         panel.add(this.add.rectangle(335, 462, 68, 58, 0x826b62).setStrokeStyle(2, 0xb8a291));
         this.label(panel, 335, 463, 'BASKET', 12);
-        this.button(panel, 'main', 200, 589, 'UPGRADES  /  LEFT', () => this.navigate('upgrades'));
+        this.nextUpgradeGoal = this.label(panel, 200, 518, '', 14, '#ffcf70');
+        this.button(panel, 'main', 110, 589, 'UPGRADES\nLEFT', () => this.navigate('upgrades'), 164).setFontSize(18);
+        this.button(panel, 'main', 290, 589, 'RECORDS\nRIGHT', () => this.navigate('records'), 164).setFontSize(18);
     }
 
     createCustomize() {
@@ -179,22 +185,100 @@ export default class Menu extends Phaser.Scene {
 
     createUpgrades() {
         const panel = this.room('upgrades', 0x3b3544, 'UPGRADES', 'The sewing table');
-        panel.add(this.add.rectangle(200, 375, 290, 24, 0x997f71));
-        for (const x of [82, 318]) panel.add(this.add.rectangle(x, 444, 18, 115, 0x826b62));
-        // Sewing-machine and thread placeholders.
-        panel.add(this.add.rectangle(170, 316, 105, 74, 0x8ca6b5));
-        panel.add(this.add.rectangle(201, 333, 39, 45, 0x3b3544));
-        panel.add(this.add.rectangle(173, 356, 124, 10, 0xb8c7d2));
-        panel.add(this.add.rectangle(276, 342, 26, 36, 0xcc655a));
-        for (const y of [322, 362]) panel.add(this.add.rectangle(276, y, 38, 6, 0xb8c7d2));
-        this.label(panel, 200, 466, 'FABRIC  /  STEERING', 18, '#8fe0d4');
-        this.label(panel, 200, 510, 'Upgrade controls coming later', 16, '#b8c7d2');
+        // Keep a small sewing-table marker above the two functional shop cards.
+        panel.add(this.add.rectangle(200, 205, 240, 10, 0x997f71));
+        panel.add(this.add.rectangle(177, 183, 65, 35, 0x8ca6b5));
+        panel.add(this.add.rectangle(195, 190, 20, 20, 0x3b3544));
+        panel.add(this.add.rectangle(250, 190, 18, 22, 0xcc655a));
+        this.upgradeCards = {};
+        for (const [id, title, top] of [['fabric', 'FABRIC', 245], ['steering', 'STEERING', 395]]) {
+            panel.add(this.add.rectangle(200, top + 53, 344, 140, 0x292735).setStrokeStyle(1, 0x709aaa));
+            this.label(panel, 200, top, title, 22);
+            const description = this.label(panel, 200, top + 28, '', 16, '#8fe0d4');
+            const owned = this.label(panel, 200, top + 51, '', 14, '#b8c7d2');
+            const buy = this.button(panel, 'upgrades', 200, top + 88, '', () => this.buyUpgrade(id), 290);
+            this.upgradeCards[id] = { description, owned, buy };
+        }
+        this.shopMessage = this.label(panel, 200, 538, 'Bonuses apply to your next run', 14, '#ffcf70');
         this.button(panel, 'upgrades', 200, 589, 'MAIN MENU  /  RIGHT', () => this.navigate('main'));
+    }
+
+    updateShop() {
+        const profile = playerData.getProfile();
+        const stats = getRunStats(profile.upgrades);
+        this.currencyText?.setText(`CURRENCY  ${profile.currency}`);
+        this.nextUpgradeGoal.setText(getUpgradeProgress(profile).message);
+        this.saveWarning?.setText(playerData.saveError || '');
+        for (const [id, card] of Object.entries(this.upgradeCards)) {
+            const level = profile.upgrades[id];
+            const max = UPGRADES[id].costs.length;
+            const price = UPGRADES[id].costs[level];
+            const capped = level >= max;
+            card.description.setText(id === 'fabric'
+                ? `${stats.maxHealth} hearts${capped ? '' : `  →  ${stats.maxHealth + 1} hearts`}`
+                : `${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% less weight delay${capped ? '' : `  →  ${Math.round((1 - 1 / (1 + 0.25 * (level + 1))) * 100)}%`}`);
+            card.owned.setText(`LEVEL ${level} / ${max}`);
+            card.buy.setText(capped ? 'MAX LEVEL' : profile.currency < price ? 'NEED 1,000 CURRENCY' : 'BUY  /  1,000 CURRENCY');
+            card.buy.shopEnabled = !capped && profile.currency >= price;
+            card.buy.setAlpha(card.buy.shopEnabled ? 1 : 0.5);
+        }
+        this.refreshControls();
+    }
+
+    buyUpgrade(id) {
+        if (this.location !== 'upgrades' || this.transitioning || this.starting) return;
+        const purchased = playerData.purchaseUpgrade(id);
+        this.shopMessage.setText(purchased ? `${id === 'fabric' ? 'Fabric' : 'Steering'} improved! Applies next run.`
+            : playerData.saveError ? 'Could not save purchase. No currency spent.' : 'Purchase unavailable');
+        this.updateShop();
+    }
+
+    createRecords() {
+        const panel = this.room('records', 0x2c3d36, 'RECORDS', 'Your laundry legends');
+        // Wood-framed corkboard, a pinned paper sheet and subtle cork flecks.
+        panel.add(this.add.rectangle(200, 350, 350, 390, 0x795442));
+        panel.add(this.add.rectangle(200, 350, 328, 368, 0xb68c5a));
+        for (let row = 0; row < 13; row++) {
+            for (let column = 0; column < 14; column++) {
+                panel.add(this.add.rectangle(45 + column * 24 + (row % 2) * 5,
+                    177 + row * 28, 3, 2, (row + column) % 2 ? 0x997044 : 0xcaa575));
+            }
+        }
+        panel.add(this.add.rectangle(204, 359, 296, 350, 0x624b36, 0.35));
+        panel.add(this.add.rectangle(200, 354, 296, 350, 0xf3eddc));
+        this.label(panel, 200, 211, 'PERSONAL BESTS', 22, '#463b32');
+        panel.add(this.add.rectangle(200, 232, 254, 2, 0xcac1aa));
+        const records = playerData.getProfile().records;
+        const number = value => value.toLocaleString('en-US');
+        const rows = [
+            ['BEST SCORE', number(records.bestScore)],
+            ['MAX SPEED', `${records.maxSpeedKmh.toFixed(1)} KM/H`],
+            ['MAX WEIGHT', `${records.maxWeight.toFixed(1)} KG`],
+            ['BIGGEST STREAK', `${number(records.maxStreak)} buttons`],
+            ['MOST BUTTONS / RUN', number(records.mostButtons)],
+            ['TOTAL BUTTONS', number(records.totalButtons)],
+            ['CURRENCY EARNED', number(records.totalCurrencyEarned)],
+            ['COMPLETED RUNS', number(records.totalRuns)]
+        ];
+        for (const [index, [label, value]] of rows.entries()) {
+            const y = 256 + index * 29;
+            panel.add(this.add.text(69, y, label, { ...TEXT, fontSize: '12px', color: '#665645' }).setOrigin(0, 0.5));
+            // Fit even large lifetime totals without overlapping the row label.
+            const entry = this.add.text(331, y, value, { ...TEXT, fontSize: '16px', color: '#352e28' }).setOrigin(1, 0.5);
+            if (entry.width > 118) entry.setScale(118 / entry.width);
+            panel.add(entry);
+            panel.add(this.add.rectangle(200, y + 14, 262, 1, 0xdcd4c1));
+        }
+        this.label(panel, 200, 501, 'Tracking starts with this update', 11, '#80715e');
+        panel.add(this.add.circle(201, 186, 7, 0x614332, 0.3));
+        panel.add(this.add.circle(200, 183, 6, 0xcc655a));
+        panel.add(this.add.circle(198, 181, 2, 0xf3b39a));
+        this.button(panel, 'records', 200, 589, 'MAIN MENU  /  LEFT', () => this.navigate('main'));
     }
 
     refreshControls() {
         for (const { room, button } of this.controls) {
-            button.input.enabled = room === this.location && !this.transitioning && !this.starting;
+            button.input.enabled = room === this.location && !this.transitioning && !this.starting && button.shopEnabled !== false;
         }
     }
 

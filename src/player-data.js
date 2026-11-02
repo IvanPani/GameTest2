@@ -1,3 +1,6 @@
+import { UPGRADES } from './upgrades.js';
+import { defaultRecords, validateRecords, recordCompletedRun } from './records.js';
+
 export const SAVE_KEY = 'falling-socks.player.v1';
 const integer = value => Number.isSafeInteger(value) && value >= 0;
 const color = value => typeof value === 'string' && /^#[\da-f]{6}$/i.test(value);
@@ -8,6 +11,7 @@ export function defaultProfile() {
     return {
         schemaVersion: 1,
         currency: 0,
+        records: defaultRecords(),
         upgrades: { fabric: 0, steering: 0 },
         sockStyle: { bodyColor: '#ffffff', accentColor: '#cc655a', patternId: 'plain', patternColor: '#ffffff' },
         unlocks: { colors: ['#ffffff', '#cc655a', '#8bc78b', '#eecb68'], patterns: ['plain', 'dots', 'stripes'], cosmetics: [] },
@@ -19,6 +23,7 @@ function validate(raw) {
     if (!raw || typeof raw !== 'object' || raw.schemaVersion !== 1) throw new Error('Unsupported save');
     const result = defaultProfile();
     if (integer(raw.currency)) result.currency = raw.currency;
+    result.records = validateRecords(raw.records);
     for (const key of Object.keys(result.upgrades)) {
         if (integer(raw.upgrades?.[key])) result.upgrades[key] = raw.upgrades[key];
     }
@@ -87,28 +92,34 @@ export class PlayerData {
         return next.activeRunId;
     }
 
-    completeRun(runId, score) {
+    completeRun(runId, score, result = {}) {
         this.load();
         if (!runId || this.profile.activeRunId !== runId) return false;
         if (!integer(score) || !integer(this.profile.currency + score)) throw new Error('Invalid run score');
         const next = this.getProfile();
         next.currency += score;
+        next.records = recordCompletedRun(next.records, score, result);
         next.activeRunId = null;
-        // Currency and the settlement marker are one storage write.
+        // Currency, records and the settlement marker are one storage write.
         this.commit(next);
         return true;
     }
 
-    purchaseUpgrade(id, { costs }) {
+    purchaseUpgrade(id) {
         this.load();
         if (!Object.hasOwn(this.profile.upgrades, id)) return false;
         const level = this.profile.upgrades[id];
-        const price = costs[level];
+        const price = UPGRADES[id]?.costs[level];
         if (!integer(price) || this.profile.currency < price) return false;
         const next = this.getProfile();
         next.currency -= price;
         next.upgrades[id] += 1;
-        this.commit(next);
+        const previous = this.profile;
+        if (!this.commit(next)) {
+            // A permanent purchase must be saved before granting its bonus.
+            this.profile = previous;
+            return false;
+        }
         return true;
     }
 

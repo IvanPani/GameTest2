@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { playerData } from './player-data.js';
+import { getUpgradeProgress } from './upgrade-progress.js';
 
 export default class End extends Phaser.Scene {
     constructor() {
@@ -13,7 +14,7 @@ export default class End extends Phaser.Scene {
     create() {
         this.leaving = false;
         this.cameras.main.setBackgroundColor('#182b3d');
-        this.add.rectangle(200, 350, 340, 420, 0x102131, 0.98)
+        this.add.rectangle(200, 350, 340, 540, 0x102131, 0.98)
             .setStrokeStyle(2, 0x49677c);
 
         this.add.text(200, 195, 'RUN OVER', {
@@ -54,7 +55,15 @@ export default class End extends Phaser.Scene {
         this.add.text(200, 455, `+${this.result.score} CURRENCY`, {
             fontFamily: 'Fredoka, sans-serif', fontSize: '18px', color: '#8fe0d4'
         }).setOrigin(0.5);
-        if (playerData.saveError) this.add.text(200, 610, playerData.saveError, {
+        const profile = playerData.getProfile();
+        this.add.text(200, 565, `CURRENCY  ${profile.currency.toLocaleString('en-US')}`, {
+            fontFamily: 'Fredoka, sans-serif', fontSize: '18px', color: '#8fe0d4'
+        }).setOrigin(0.5);
+        this.add.text(200, 597, getUpgradeProgress(profile).message, {
+            fontFamily: 'Fredoka, sans-serif', fontSize: '14px', color: '#ffcf70',
+            align: 'center', wordWrap: { width: 310 }
+        }).setOrigin(0.5);
+        if (playerData.saveError) this.add.text(200, 655, playerData.saveError, {
             fontFamily: 'Fredoka, sans-serif', fontSize: '16px', color: '#ffcf70',
             align: 'center', wordWrap: { width: 350 }
         }).setOrigin(0.5);

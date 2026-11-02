@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import Player from './player.js';
 import { playerData } from './player-data.js';
+import { getRunStats } from './upgrades.js';
 import { COMBO, getComboMultiplier } from './combo.js';
 import { silhouettesOverlap } from './silhouette-collision.js';
 import { MOVEMENT, getWeight, getFallSpeed, getSpeedKmh, steer } from './movement.js';
@@ -8,7 +9,6 @@ import { MOVEMENT, getWeight, getFallSpeed, getSpeedKmh, steer } from './movemen
 const WIDTH = 400;
 const HEIGHT = 700;
 const PLAYER_Y_RATIO = 0.23;
-const MAX_HEALTH = 3;
 const MULTIPLIER_STYLE = Object.freeze({
     fontSize: 24,
     yellow: '#fff200',
@@ -58,6 +58,7 @@ export default class Level extends Phaser.Scene {
 
     create() {
         this.runId = playerData.beginRun();
+        this.runStats = getRunStats(playerData.getProfile().upgrades);
         this.runEnded = false;
         this.cameras.main.setBackgroundColor('#182b3d');
         this.createShaft();
@@ -83,9 +84,11 @@ export default class Level extends Phaser.Scene {
         this.combo = 0;
         this.testMultiplier = 1;
         this.maxCombo = 0;
+        this.pickupStreak = 0;
+        this.bestPickupStreak = 0;
         this.consecutiveMisses = 0;
         this.weight = getWeight(this.buttonsCollected);
-        this.health = MAX_HEALTH;
+        this.health = this.runStats.maxHealth;
 
         this.createHud();
 
@@ -122,8 +125,9 @@ export default class Level extends Phaser.Scene {
     createHud() {
         this.add.rectangle(WIDTH / 2, 54, WIDTH, 108, 0x102131, 0.96).setDepth(10);
         this.add.text(12, 15, 'FABRIC', this.hudStyle(15, '#f3f6ed')).setDepth(11);
-        this.hearts = Array.from({ length: MAX_HEALTH }, (_, index) => {
-            const heart = this.add.graphics({ x: 22 + index * 24, y: 56 }).setDepth(11);
+        this.hearts = Array.from({ length: this.runStats.maxHealth }, (_, index) => {
+            // Four hearts per row keeps all eight clear of weight/speed and combo.
+            const heart = this.add.graphics({ x: 22 + (index % 4) * 22, y: 50 + Math.floor(index / 4) * 24 }).setDepth(11);
             // Draw hearts as geometry so they stay red on every platform/font.
             const points = Array.from({ length: 48 }, (_, point) => {
                 const angle = point / 48 * Math.PI * 2;
@@ -307,7 +311,7 @@ export default class Level extends Phaser.Scene {
         const targetVelocity = direction !== 0
             ? direction * MOVEMENT.steeringSpeed
             : (this.pointerSteering ? Math.sign(difference) * MOVEMENT.steeringSpeed : 0);
-        const movement = steer(this.steeringVelocity, targetVelocity, this.weight, seconds);
+        const movement = steer(this.steeringVelocity, targetVelocity, this.weight, seconds, this.runStats.steeringDelayMultiplier);
         this.steeringVelocity = movement.velocity;
 
         // A pointer selects a destination: stop there rather than oscillating around it.
@@ -402,20 +406,23 @@ export default class Level extends Phaser.Scene {
                 if (this.damageTimer === 0) {
                     this.health -= 1;
                     this.combo = 0;
+                    this.pickupStreak = 0;
                     this.testMultiplier = 1;
                     this.consecutiveMisses = 0;
                     this.damageTimer = MOVEMENT.damageInvulnerabilityMs;
                     this.updateHud();
                     if (this.health <= 0) {
                         this.runEnded = true;
-                        playerData.completeRun(this.runId, this.score);
-                        this.scene.start('end', {
+                        const result = {
                             score: this.score,
                             weight: this.weight,
                             speedKmh: getSpeedKmh(this.buttonsCollected),
                             totalButtons: this.buttonsCollected,
-                            maxCombo: this.maxCombo
-                        });
+                            maxCombo: this.maxCombo,
+                            bestPickupStreak: this.bestPickupStreak
+                        };
+                        playerData.completeRun(this.runId, this.score, result);
+                        this.scene.start('end', result);
                         return;
                     }
                 }
@@ -433,6 +440,8 @@ export default class Level extends Phaser.Scene {
                 collectible.shape.destroy();
                 this.collectibles.splice(index, 1);
                 this.buttonsCollected += 1;
+                this.pickupStreak += 1;
+                this.bestPickupStreak = Math.max(this.bestPickupStreak, this.pickupStreak);
                 this.combo += 1;
                 this.maxCombo = Math.max(this.maxCombo, this.combo);
                 this.consecutiveMisses = 0;
@@ -445,6 +454,7 @@ export default class Level extends Phaser.Scene {
                 if (!collectible.missed
                     && collectible.shape.getBounds().bottom < this.player.sock.getBounds().top) {
                     collectible.missed = true;
+                    this.pickupStreak = 0;
                     this.consecutiveMisses += 1;
                     if (this.consecutiveMisses >= COMBO.missesBeforeReset) {
                         this.combo = 0;

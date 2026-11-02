@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Upgrade shop test</title>
+<style>body{margin:0;background:#182b3d;color:white;font:14px sans-serif}#status{white-space:pre-wrap}#juego{width:400px;height:700px}</style>
+<button id="finish">Complete test run</button><pre id="status">Loading isolated shop fixture…</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';
+import Boot from '../src/boot.js';
+import Menu from '../src/menu.js';
+import Level from '../src/level.js';
+import End from '../src/end.js';
+import { playerData, defaultProfile } from '../src/player-data.js';
+// Browser-only test fixture: isolated session storage, never the real player save.
+const key = 'falling-socks-upgrade-shop-test';
+if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify({ ...defaultProfile(), currency: 2000 }));
+playerData.getStorage = () => ({ getItem: () => sessionStorage.getItem(key), setItem: (_, value) => sessionStorage.setItem(key, value) });
+const game = new Phaser.Game({ type:Phaser.AUTO, width:400, height:700, parent:'juego', scene:[Boot,Menu,Level,End], audio:{noAudio:true} });
+document.querySelector('#finish').onclick = () => {
+    if (!game.scene.isActive('level')) return;
+    const level = game.scene.getScene('level');
+    const overlap = level.overlapsPlayer;
+    level.overlapsPlayer = () => true;
+    level.obstacles.forEach(object => object.shape.destroy());
+    level.obstacles = [];
+    level.collectibles.forEach(object => object.shape.destroy());
+    level.collectibles = [];
+    level.spawnCollectible();
+    level.moveObjects(0);
+    level.health = 1;
+    level.damageTimer = 0;
+    level.spawnObstacle();
+    level.moveObjects(0);
+    level.overlapsPlayer = overlap;
+};
+game.events.on('poststep', () => {
+    const p = playerData.getProfile();
+    const level = game.scene.getScene('level');
+    document.querySelector('#status').textContent = `ISOLATED TEST SAVE\nCurrency: ${p.currency}; Fabric: ${p.upgrades.fabric}; Steering: ${p.upgrades.steering}`
+        + (game.scene.isActive('level') ? `\nRun: ${level.health}/${level.runStats.maxHealth} hearts; HUD hearts: ${level.hearts.length}; steering delay multiplier: ${level.runStats.steeringDelayMultiplier}; weight: ${level.weight}` : '');
+});
+</script></html>
