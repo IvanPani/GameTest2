@@ -24,6 +24,8 @@ export default class Menu extends Phaser.Scene {
         this.location = 'main';
         this.transitioning = false;
         this.starting = false;
+        this.entryFinished = false;
+        this.artButtons = [];
         this.controls = [];
         this.cameras.main.setBackgroundColor('#182b3d');
         this.cameras.main.setScroll(0, 0);
@@ -32,9 +34,9 @@ export default class Menu extends Phaser.Scene {
         this.createUpgrades();
         this.createRecords();
 
-        this.add.rectangle(200, 30, WIDTH, 60, 0x102131, 0.97).setScrollFactor(0).setDepth(10);
-        this.currencyText = this.add.text(384, 20, `CURRENCY  ${playerData.getProfile().currency}`, {
-            ...TEXT, fontSize: '22px'
+        this.add.rectangle(287, 27, 210, 38, 0x102131, 0.88).setScrollFactor(0).setDepth(10);
+        this.currencyText = this.add.text(384, 16, `CURRENCY  ${playerData.getProfile().currency}`, {
+            ...TEXT, fontSize: '18px'
         }).setOrigin(1, 0).setScrollFactor(0).setDepth(11);
         this.saveWarning = this.add.text(200, 675, playerData.saveError || '', {
             ...TEXT, fontSize: '16px', color: '#ffcf70', align: 'center', wordWrap: { width: 350 }
@@ -49,11 +51,15 @@ export default class Menu extends Phaser.Scene {
             ENTER: () => this.startRun(),
             SPACE: () => this.startRun()
         };
+        const navigationKeys = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'SPACE'];
+        this.input.keyboard?.addCapture(navigationKeys);
         for (const [key, handler] of Object.entries(keys)) this.input.keyboard?.on(`keydown-${key}`, handler);
         const camera = this.cameras.main;
         this.events.once('shutdown', () => {
             for (const [key, handler] of Object.entries(keys)) this.input.keyboard?.off(`keydown-${key}`, handler);
+            this.input.keyboard?.removeCapture(navigationKeys);
             camera.off('camerapancomplete', this.finishNavigation, this);
+            camera.off('camerafadeoutcomplete', this.finishEntry, this);
         });
         this.updateShop();
     }
@@ -95,27 +101,61 @@ export default class Menu extends Phaser.Scene {
             .setOrigin(0.61, 0.83)
             .setAngle(180)
             .setScale(SOCK_VISUALS.scale * scale);
-        panel.add(sock);
+        if (panel) panel.add(sock);
         return sock;
     }
 
+    artButton(panel, x, y, key, width, action) {
+        const button = this.add.image(x, y, key);
+        const scale = width / button.width;
+        button.setScale(scale).setInteractive({ useHandCursor: true, pixelPerfect: true, alphaTolerance: 24 });
+        panel.add(button);
+        this.controls.push({ room: 'main', button });
+        this.artButtons.push({ button, scale });
+        const resize = factor => {
+            this.tweens.killTweensOf(button);
+            this.tweens.add({ targets: button, scale: scale * factor, duration: 100, ease: 'Sine.easeOut' });
+        };
+        button.on('pointerover', () => {
+            if (this.location === 'main' && !this.transitioning && !this.starting) resize(1.04);
+        });
+        button.on('pointerout', () => resize(1));
+        button.on('pointerdown', () => {
+            if (this.location !== 'main' || this.transitioning || this.starting) return;
+            resize(0.96);
+            action();
+        });
+        return button;
+    }
+
     createMain() {
-        const panel = this.room('main', 0x182b3d, 'MAIN MENU', 'Socks to be you!');
-        this.button(panel, 'main', 200, 204, 'CUSTOMIZE  /  UP', () => this.navigate('customize'));
-        // Top-loading washer, with Play on the appliance's control panel.
-        panel.add(this.add.rectangle(200, 394, 170, 210, 0x8ca6b5).setStrokeStyle(3, 0x49677c));
-        panel.add(this.add.ellipse(200, 290, 170, 54, 0xb8c7d2).setStrokeStyle(3, 0x49677c));
-        panel.add(this.add.ellipse(200, 289, 110, 30, 0x102131));
-        panel.add(this.add.rectangle(200, 432, 126, 66, 0x708c9e));
-        this.button(panel, 'main', 200, 360, 'PLAY', () => this.startRun(), 136);
-        // Shelf, sock and basket mark the intended main-room composition.
-        panel.add(this.add.rectangle(62, 425, 86, 10, 0x826b62));
-        this.mainSock = this.sock(panel, 58, 383, 0.65);
-        panel.add(this.add.rectangle(335, 462, 68, 58, 0x826b62).setStrokeStyle(2, 0xb8a291));
-        this.label(panel, 335, 463, 'BASKET', 12);
-        this.nextUpgradeGoal = this.label(panel, 200, 518, '', 14, '#ffcf70');
-        this.button(panel, 'main', 110, 589, 'UPGRADES\nLEFT', () => this.navigate('upgrades'), 164).setFontSize(18);
-        this.button(panel, 'main', 290, 589, 'RECORDS\nRIGHT', () => this.navigate('records'), 164).setFontSize(18);
+        const panel = this.add.container(0, 0);
+        this.mainPanel = panel;
+        panel.setDepth(2);
+        this.add.image(200, 350, 'menu-background').setDisplaySize(WIDTH, HEIGHT).setDepth(-1);
+        // The same saved sock as Customize and Player, standing behind the basket rim.
+        this.mainSock = this.sock(null, 282, 194, 1.5).setDepth(1);
+        // Crop at the basket rim in source-frame coordinates. Image cropping
+        // works in both Phaser 4 renderers, unlike the legacy geometry mask.
+        const frame = this.mainSock.frame;
+        const cropY = Math.ceil(this.mainSock.originY * frame.height - (246 - this.mainSock.y) / this.mainSock.scaleY);
+        this.mainSock.setCrop(0, cropY, frame.width, frame.height - cropY);
+        const rim = this.add.image(210, 259, 'menu-basket-rim');
+        rim.setScale(225 / rim.width).setCrop(0, 18, rim.width, 20);
+        panel.add(rim);
+        panel.add(this.add.text(200, 73, 'FALLING SOCKS', {
+            fontFamily: 'DynaPuff, sans-serif', fontSize: '31px', fontStyle: 'bold',
+            color: '#fff0c8', stroke: '#45372b', strokeThickness: 5
+        }).setOrigin(0.5));
+        panel.add(this.add.text(200, 103, 'Socks to be you!', {
+            ...TEXT, fontSize: '15px', color: '#fff0c8', stroke: '#45372b', strokeThickness: 3
+        }).setOrigin(0.5));
+        this.artButton(panel, 200, 158, 'menu-customize', 222, () => this.navigate('customize'));
+        this.artButton(panel, 47, 312, 'menu-upgrades', 89, () => this.navigate('upgrades'));
+        this.artButton(panel, 352, 312, 'menu-records', 89, () => this.navigate('records'));
+        this.artButton(panel, 200, 501, 'menu-play', 159, () => this.startRun());
+        panel.add(this.add.rectangle(200, 647, 354, 29, 0x102131, 0.82));
+        this.nextUpgradeGoal = this.label(panel, 200, 647, '', 14, '#ffcf70');
     }
 
     createCustomize() {
@@ -309,13 +349,43 @@ export default class Menu extends Phaser.Scene {
     finishNavigation() {
         this.location = this.destination;
         this.transitioning = false;
+        for (const { button, scale } of this.artButtons) {
+            this.tweens.killTweensOf(button);
+            button.setScale(scale);
+        }
         this.refreshControls();
     }
 
     startRun() {
-        if (this.location !== 'main' || this.transitioning || this.starting) return;
+        if (this.location !== 'main' || this.transitioning || this.entryFinished) return;
+        // Press Enter or Space again to skip the short washer-entry animation.
+        if (this.starting) { this.finishEntry(); return; }
         this.starting = true;
         this.refreshControls();
+        this.mainSock.setCrop();
+        this.mainSock.setDepth(3);
+        this.tweens.add({
+            targets: this.mainSock, x: 238, y: 168, angle: 230,
+            duration: 210, ease: 'Sine.easeOut',
+            onComplete: () => this.tweens.add({
+                targets: this.mainSock, x: 200, y: 456, angle: 360,
+                duration: 410, ease: 'Sine.easeIn',
+                onComplete: () => this.tweens.add({
+                    targets: this.mainSock, y: 471, scale: 0.03, alpha: 0,
+                    duration: 120, ease: 'Sine.easeIn',
+                    onComplete: () => {
+                        this.cameras.main.once('camerafadeoutcomplete', this.finishEntry, this);
+                        this.cameras.main.fadeOut(170, 0, 0, 0);
+                    }
+                })
+            })
+        });
+    }
+
+    finishEntry() {
+        if (this.entryFinished) return;
+        this.entryFinished = true;
+        this.tweens.killTweensOf(this.mainSock);
         this.scene.start('level');
     }
 }

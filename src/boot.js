@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MENU_ART } from './menu-art.js';
 import { playerData } from './player-data.js';
 import { applySockStyle, CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
 import { getFrameMask } from './silhouette-collision.js';
@@ -11,6 +12,7 @@ export default class Boot extends Phaser.Scene {
     }
 
     preload() {
+        for (const [key, url] of MENU_ART) this.load.image(key, url);
         this.load.image('button', new URL('../assets/sprites/button.png', import.meta.url).href);
         this.load.image('soap', new URL('../assets/sprites/soap.png', import.meta.url).href);
         this.load.image(

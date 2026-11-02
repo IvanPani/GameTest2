@@ -1,0 +1,57 @@
+{
+  "logicalViewport": {
+    "width": 400,
+    "height": 700
+  },
+  "background": {
+    "file": "main_menu_background.png",
+    "x": 200,
+    "y": 350,
+    "displayWidth": 400,
+    "displayHeight": 700
+  },
+  "buttons": {
+    "customize": {
+      "file": "button_customize.png",
+      "centerX": 200,
+      "centerY": 158,
+      "displayWidth": 222,
+      "action": "navigate(customize)"
+    },
+    "upgrades": {
+      "file": "button_upgrades.png",
+      "centerX": 47,
+      "centerY": 312,
+      "displayWidth": 89,
+      "action": "navigate(upgrades)"
+    },
+    "records": {
+      "file": "button_records.png",
+      "centerX": 352,
+      "centerY": 312,
+      "displayWidth": 89,
+      "action": "navigate(records)"
+    },
+    "play": {
+      "file": "button_play.png",
+      "centerX": 200,
+      "centerY": 501,
+      "displayWidth": 159,
+      "action": "startRunWithJump()"
+    }
+  },
+  "hero": {
+    "texture": "custom-sock-stages",
+    "frame": 0,
+    "x": 285,
+    "y": 274,
+    "scale": "same source scale as existing Player, adjusted for menu",
+    "depth": "above basket, optional foreground rim above character"
+  },
+  "logo": "Phaser dynamic text or its own transparent sprite, not part of background",
+  "notes": [
+    "Coordinates are starting points. Adjust by visual playtesting.",
+    "Buttons and sock are independent Phaser objects; background has neither.",
+    "Records is new and requires a room plus fade logic."
+  ]
+}
