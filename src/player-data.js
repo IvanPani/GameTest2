@@ -10,7 +10,7 @@ export function defaultProfile() {
         currency: 0,
         upgrades: { fabric: 0, steering: 0 },
         sockStyle: { bodyColor: '#ffffff', accentColor: '#cc655a', patternId: 'plain', patternColor: '#ffffff' },
-        unlocks: { colors: ['#ffffff', '#cc655a'], patterns: ['plain'], cosmetics: [] },
+        unlocks: { colors: ['#ffffff', '#cc655a', '#8bc78b', '#eecb68'], patterns: ['plain', 'dots', 'stripes'], cosmetics: [] },
         activeRunId: null
     };
 }
@@ -24,7 +24,7 @@ function validate(raw) {
     }
     result.unlocks.colors = [...new Set([...result.unlocks.colors,
         ...(Array.isArray(raw.unlocks?.colors) ? raw.unlocks.colors.filter(color) : [])])];
-    result.unlocks.patterns = [...new Set(['plain', ...ids(raw.unlocks?.patterns)])];
+    result.unlocks.patterns = [...new Set([...result.unlocks.patterns, ...ids(raw.unlocks?.patterns)])];
     result.unlocks.cosmetics = ids(raw.unlocks?.cosmetics);
     for (const key of ['bodyColor', 'accentColor', 'patternColor']) {
         if (result.unlocks.colors.includes(raw.sockStyle?.[key])) result.sockStyle[key] = raw.sockStyle[key];

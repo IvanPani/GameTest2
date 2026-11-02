@@ -10,7 +10,7 @@ export default class Player extends Phaser.GameObjects.Container {
     constructor(scene, x, y) {
         super(scene, x, y);
         this.scene = scene;
-        this.sock = scene.add.sprite(0, 0, 'white-sock-stages')
+        this.sock = scene.add.sprite(0, 0, 'custom-sock-stages')
             .setScale(SOCK_VISUALS.scale);
         this.add(this.sock);
         this.stage = -1;
@@ -25,7 +25,7 @@ export default class Player extends Phaser.GameObjects.Container {
         }
         if (stage === this.stage) return;
         this.stage = stage;
-        this.sock.play(`white-sock-stage-${stage}`);
+        this.sock.play(`custom-sock-stage-${stage}`);
         this.setSize(this.sock.displayWidth, this.sock.displayHeight);
     }
 }

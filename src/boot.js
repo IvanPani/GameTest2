@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { playerData } from './player-data.js';
+import { applySockStyle, CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
 import { getFrameMask } from './silhouette-collision.js';
 
 const FALL_ANIMATION_FPS = 8;
@@ -45,11 +46,14 @@ export default class Boot extends Phaser.Scene {
         });
         }
         // Cache source silhouettes once, before gameplay (not on every collision).
-        const stages = this.textures.get('white-sock-stages');
-        for (let frame = 0; frame < 30; frame += 1) getFrameMask(stages.get(frame));
+        // The customized frames have the same alpha as the original spritesheet.
+        // Precompute their collision silhouettes after creating the custom texture.
         for (const name of ['small', 'medium', 'large']) getFrameMask(soap.get(name));
         getFrameMask(this.textures.getFrame('button'));
         playerData.load();
+        applySockStyle(this, playerData.getProfile().sockStyle);
+        const customStages = this.textures.get(CUSTOM_SOCK_TEXTURE);
+        for (let frame = 0; frame < 30; frame += 1) getFrameMask(customStages.get(frame));
         this.scene.start('menu');
     }
 }

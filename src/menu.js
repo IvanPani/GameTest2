@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { playerData } from './player-data.js';
+import { SOCK_VISUALS } from './player.js';
+import { CUSTOM_SOCK_TEXTURE, applySockStyle } from './sock-skin.js';
 
 const WIDTH = 400;
 const HEIGHT = 700;
@@ -80,19 +82,16 @@ export default class Menu extends Phaser.Scene {
         return button;
     }
 
-    // Neutral sock silhouette stands in for the shared customizable character.
+    // Hub poses share the live customized texture, but have no animation state.
+    // Frame 0 is toe-up in the source art: turn it cuff-up and anchor at the cuff
+    // so the clothesline peg holds the sock instead of its transparent frame.
     sock(panel, x, y, scale = 1) {
-        const sock = this.add.graphics({ x, y });
-        sock.fillStyle(0xe6ece8);
-        sock.fillPoints([
-            { x: -18, y: -45 }, { x: 18, y: -45 }, { x: 18, y: 12 },
-            { x: 40, y: 25 }, { x: 36, y: 44 }, { x: 16, y: 48 },
-            { x: -18, y: 25 }
-        ], true);
-        sock.fillStyle(0xcc655a);
-        sock.fillRect(-18, -45, 36, 12);
-        sock.setScale(scale);
+        const sock = this.add.image(x, y, CUSTOM_SOCK_TEXTURE, 0)
+            .setOrigin(0.61, 0.83)
+            .setAngle(180)
+            .setScale(SOCK_VISUALS.scale * scale);
         panel.add(sock);
+        return sock;
     }
 
     createMain() {
@@ -106,7 +105,7 @@ export default class Menu extends Phaser.Scene {
         this.button(panel, 'main', 200, 360, 'PLAY', () => this.startRun(), 136);
         // Shelf, sock and basket mark the intended main-room composition.
         panel.add(this.add.rectangle(62, 425, 86, 10, 0x826b62));
-        this.sock(panel, 58, 383, 0.65);
+        this.mainSock = this.sock(panel, 58, 383, 0.65);
         panel.add(this.add.rectangle(335, 462, 68, 58, 0x826b62).setStrokeStyle(2, 0xb8a291));
         this.label(panel, 335, 463, 'BASKET', 12);
         this.button(panel, 'main', 200, 589, 'UPGRADES  /  LEFT', () => this.navigate('upgrades'));
@@ -114,12 +113,68 @@ export default class Menu extends Phaser.Scene {
 
     createCustomize() {
         const panel = this.room('customize', 0x253e4a, 'CUSTOMIZE', 'The clothesline');
-        panel.add(this.add.rectangle(200, 256, 344, 4, 0xb8c7d2));
-        this.sock(panel, 193, 326, 1.3);
-        panel.add(this.add.rectangle(181, 263, 10, 27, 0xccaa78));
-        this.label(panel, 200, 444, 'COLORS  /  PATTERNS  /  COSMETICS', 16, '#8fe0d4');
-        this.label(panel, 200, 483, 'Customization controls coming later', 16, '#b8c7d2');
-        this.button(panel, 'customize', 200, 589, 'MAIN MENU  /  DOWN', () => this.navigate('main'));
+        panel.add(this.add.rectangle(200, 225, 344, 4, 0xb8c7d2));
+        this.customizeSock = this.sock(panel, 192, 235, 1.85);
+        panel.add(this.add.rectangle(192, 228, 10, 26, 0xccaa78));
+        this.createSkinControls(panel);
+        this.button(panel, 'customize', 200, 645, 'MAIN MENU  /  DOWN', () => this.navigate('main'), 280);
+    }
+
+    // Temporary customization controls in the actual clothesline room.
+    // Any style change refreshes the shared cached texture, so both hub socks
+    // and the next gameplay Player immediately use the same selected colors.
+    createSkinControls(panel) {
+        const colors = ['#ffffff', '#cc655a', '#8bc78b', '#eecb68'];
+        const patterns = ['plain', 'dots', 'stripes'];
+        this.skinSwatches = [];
+        this.skinPatternButtons = [];
+        const register = (element) => {
+            panel.add(element);
+            this.controls.push({ room: 'customize', button: element });
+            return element;
+        };
+        const choose = (partial) => {
+            if (this.location !== 'customize' || this.transitioning || this.starting) return;
+            if (!playerData.selectStyle(partial)) return;
+            applySockStyle(this, playerData.getProfile().sockStyle);
+            this.updateSkinSelection();
+        };
+        for (const [label, property, y] of [
+            ['BODY', 'bodyColor', 405],
+            ['ACCENT', 'accentColor', 449],
+            ['PATTERN COLOR', 'patternColor', 493]
+        ]) {
+            this.label(panel, 74, y, label, label === 'PATTERN COLOR' ? 12 : 15);
+            for (const [index, color] of colors.entries()) {
+                const swatch = register(this.add.rectangle(186 + index * 44, y, 29, 29,
+                    Phaser.Display.Color.HexStringToColor(color).color)
+                    .setInteractive({ useHandCursor: true }));
+                swatch.on('pointerdown', () => choose({ [property]: color }));
+                this.skinSwatches.push({ swatch, property, color });
+            }
+        }
+        this.label(panel, 71, 547, 'PATTERN', 15);
+        for (const [index, id] of patterns.entries()) {
+            const button = register(this.add.text(171 + index * 76, 547, id.toUpperCase(), {
+                ...TEXT, fontSize: '13px', backgroundColor: '#35566c',
+                padding: { x: 7, y: 9 }
+            }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
+            button.on('pointerdown', () => choose({ patternId: id }));
+            this.skinPatternButtons.push({ button, id });
+        }
+        this.label(panel, 200, 597, 'PREVIEW  •  SAVES AUTOMATICALLY', 12, '#8fe0d4');
+        this.updateSkinSelection();
+    }
+
+    updateSkinSelection() {
+        const style = playerData.getProfile().sockStyle;
+        for (const { swatch, property, color } of this.skinSwatches || []) {
+            const active = style[property] === color;
+            swatch.setStrokeStyle(active ? 3 : 1, active ? 0xffd370 : 0xb8c7d2);
+        }
+        for (const { button, id } of this.skinPatternButtons || []) {
+            button.setBackgroundColor(style.patternId === id ? '#709aaa' : '#35566c');
+        }
     }
 
     createUpgrades() {
