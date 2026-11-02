@@ -1,0 +1,43 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Five-state sock preview</title>
+<style>body{margin:0;background:#182b3d;color:white;font:14px sans-serif}#juego{width:min(100vw,400px);height:600px}#status{white-space:pre-wrap}label{display:inline-block;padding:4px}</style>
+<label>Pattern <select id="pattern"></select></label><label><input type="checkbox" id="toes" checked>Toes</label><label><input type="checkbox" id="cuff" checked>Cuff band</label>
+<button id="check">Check all 30 frames</button><pre id="status">Preview does not change your saved style.</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';
+import Boot from '../src/boot.js';
+import Player from '../src/player.js';
+import { applySockStyle, CUSTOM_SOCK_TEXTURE } from '../src/sock-skin.js';
+import { SOCK_PATTERNS } from '../src/sock-customization.js';
+let scene;
+const style = {bodyColor:'#73bdeb',accentColor:'#f3cf4b',patternColor:'#182c60',patternId:'stars',toesEnabled:true,cuffEnabled:true};
+const select = document.querySelector('#pattern');
+for (const pattern of SOCK_PATTERNS) select.add(new Option(pattern.name, pattern.id));
+select.value = style.patternId;
+function refresh(){if(scene)applySockStyle(scene,style);document.querySelector('#status').textContent='Preview updated. Saved style unchanged. Run the frame check for this selection.';}
+select.onchange=()=>{style.patternId=select.value;refresh();};
+document.querySelector('#toes').onchange=e=>{style.toesEnabled=e.target.checked;refresh();};
+document.querySelector('#cuff').onchange=e=>{style.cuffEnabled=e.target.checked;refresh();};
+class Preview extends Phaser.Scene {
+ constructor(){super({key:'menu'});}
+ create(){
+  scene=this; refresh();
+  [0,10,25,50,100].forEach((buttons,index)=>{
+   const player=new Player(this,88,70+index*108);player.setButtonCount(buttons);player.setScale(1.5);
+   this.add.text(165,50+index*108,`STATE ${index+1}\n${buttons} buttons`,{fontSize:'18px',color:'#f3f6ed'});
+  });
+ }
+}
+new Phaser.Game({type:Phaser.AUTO,width:400,height:600,parent:'juego',scene:[Boot,Preview],scale:{mode:Phaser.Scale.FIT}});
+document.querySelector('#check').onclick=()=>{
+ if(!scene)return;
+ const original=scene.textures.get('white-sock-stages').getSourceImage();
+ const canvas=document.createElement('canvas');canvas.width=original.width;canvas.height=original.height;
+ const ctx=canvas.getContext('2d');ctx.drawImage(original,0,0);
+ const alpha=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+ const custom=scene.textures.get(CUSTOM_SOCK_TEXTURE).getSourceImage();
+ const output=custom.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+ for(let i=3;i<alpha.length;i+=4)if(alpha[i]!==output[i])throw Error('Alpha changed');
+ for(let frame=0;frame<30;frame++)if(!scene.textures.get(CUSTOM_SOCK_TEXTURE).has(frame))throw Error('Missing frame');
+ document.querySelector('#status').textContent='PASS: all 30 customized frames exist; every source alpha byte matches. Five Player weight states shown below. Saved style unchanged.';
+};
+</script></html>

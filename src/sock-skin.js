@@ -1,101 +1,107 @@
-/**
- * Falling Socks - cosmetic renderer, prototype v1.
- * Builds ONE recolored 30-frame Phaser CanvasTexture from the original sheet.
- * No additional spritesheets are required for colors or basic patterns.
- *
- * Trade-off: original art is flattened, so red accents are detected by color.
- * For production, artist-authored body/heel/toe masks should replace detection.
+/** Shared cosmetic renderer for all 30 frames; source pixels and alpha stay intact.
+ * Toe/heel regions come from the source red paint. The cuff band follows each
+ * frame's opaque bounds; these are procedural masks over the flattened artwork.
  */
+import { SOCK_PATTERNS, patternOpacity } from './sock-customization.js';
+export { patternOpacity } from './sock-customization.js';
 export const CUSTOM_SOCK_TEXTURE = 'custom-sock-stages';
 const SOURCE_SOCK_TEXTURE = 'white-sock-stages';
 const FRAME_SIZE = 512;
 const COLUMNS = 6;
 const ROWS = 5;
 const ANIMATION_FPS = 8;
-
 let sourceCache = null;
+const tiles = new Map();
+const clamp = value => Math.min(1, Math.max(0, value));
+const byte = value => Math.min(255, Math.max(0, Math.round(value)));
 
-function parseColor(hex, fallback = '#ffffff') {
-    const valid = typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : fallback;
-    return [1, 3, 5].map(i => parseInt(valid.slice(i, i + 2), 16));
+function parseColor(hex, fallback) {
+    const value = typeof hex === 'string' && /^#[\da-f]{6}$/i.test(hex) ? hex : fallback;
+    return [1, 3, 5].map(index => parseInt(value.slice(index, index + 2), 16));
 }
 
-function clampByte(value) {
-    return Math.min(255, Math.max(0, Math.round(value)));
+function toeOpacity(r, g, b) {
+    // Soft transitions retain antialiased fabric edges and shaded red patches.
+    return clamp((r - Math.max(g, b) - 12) / 28) * clamp((r / Math.max(1, g, b) - 1.2) / 0.4);
 }
+export function isSockAccent(r, g, b) { return toeOpacity(r, g, b) > 0.5; }
 
-// Finds the clearly red patches without altering the dark line art.
-// Current art was painted with red toe and heel; this is an approximation.
-export function isSockAccent(red, green, blue) {
-    return red > 40 && red > green * 1.55 && red > blue * 1.55 && red - green > 35;
-}
-
-function distanceToDot(localX, localY) {
-    const dx = ((localX + 6) % 48) - 24;
-    const dy = ((localY + 11) % 48) - 24;
-    return Math.sqrt(dx * dx + dy * dy);
-}
-
-export function patternOpacity(patternId, localX, localY) {
-    if (patternId === 'dots') {
-        const d = distanceToDot(localX, localY);
-        return Math.max(0, Math.min(1, 8.5 - d));
+export function getSockFrameBounds(pixels, width, height) {
+    if (width % FRAME_SIZE || height % FRAME_SIZE) return [];
+    const bounds = [];
+    for (let row = 0; row < height / FRAME_SIZE; row++) {
+        for (let column = 0; column < width / FRAME_SIZE; column++) {
+            let left = FRAME_SIZE, top = FRAME_SIZE, right = 0, bottom = 0;
+            for (let y = 0; y < FRAME_SIZE; y++) {
+                for (let x = 0; x < FRAME_SIZE; x++) {
+                    if (pixels[((row * FRAME_SIZE + y) * width + column * FRAME_SIZE + x) * 4 + 3] < 64) continue;
+                    left = Math.min(left, x); right = Math.max(right, x);
+                    top = Math.min(top, y); bottom = Math.max(bottom, y);
+                }
+            }
+            bounds.push({ left, top, width: right - left + 1, height: bottom - top + 1 });
+        }
     }
-    if (patternId === 'stripes') {
-        // Attached to coordinates within each animation frame, not the screen.
-        // Diagonal bands are deliberately simple for this initial art test.
-        const band = ((localX + localY * 0.45) % 50 + 50) % 50;
-        return band < 9 ? 1 : band < 10 ? 10 - band : 0;
-    }
-    return 0;
+    return bounds;
 }
 
-/** Returns a new RGBA pixel buffer; source pixels are never changed. */
-export function recolorSockPixels(source, width, height, style) {
+export function cuffBandOpacity(x, y, bounds) {
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return 0;
+    const u = (x - bounds.left) / bounds.width;
+    const v = (y - bounds.top) / bounds.height;
+    if (u < 0.4 || v < 0.65) return 0;
+    // A sloping band on the lower-right cuff in the original toe-up frames.
+    const band = v - 0.18 * (u - 0.65);
+    return clamp((band - 0.74) / 0.008) * clamp((0.81 - band) / 0.008);
+}
+
+function patternTile(id) {
+    if (!tiles.has(id)) {
+        // 192 is a common period for 64-pixel motifs and 48-pixel stripes.
+        const tile = new Float32Array(192 * 192);
+        for (let y = 0; y < 192; y++) for (let x = 0; x < 192; x++) {
+            let coverage = 0;
+            for (const dx of [0.25, 0.75]) for (const dy of [0.25, 0.75]) coverage += patternOpacity(id, x + dx, y + dy);
+            tile[y * 192 + x] = coverage / 4;
+        }
+        tiles.set(id, tile);
+    }
+    return tiles.get(id);
+}
+
+export function recolorSockPixels(source, width, height, style, frameBounds = getSockFrameBounds(source, width, height)) {
     if (source.length !== width * height * 4) throw new Error('Invalid RGBA dimensions');
     const out = new Uint8ClampedArray(source);
     const body = parseColor(style?.bodyColor, '#ffffff');
     const accent = parseColor(style?.accentColor, '#cc655a');
     const pattern = parseColor(style?.patternColor, '#ffffff');
-    const patternId = ['dots', 'stripes'].includes(style?.patternId) ? style.patternId : 'plain';
-    const keepBody = body.every(channel => channel === 255);
-    const keepAccent = accent[0] === 204 && accent[1] === 101 && accent[2] === 90;
-
+    const patternId = SOCK_PATTERNS.some(item => item.id === style?.patternId) ? style.patternId : 'plain';
+    const tile = patternId === 'plain' ? null : patternTile(patternId);
+    const columns = width / FRAME_SIZE;
     for (let y = 0; y < height; y++) {
         const localY = y % FRAME_SIZE;
         for (let x = 0; x < width; x++) {
             const i = (y * width + x) * 4;
-            if (source[i + 3] === 0) continue;
+            if (!source[i + 3]) continue;
+            const localX = x % FRAME_SIZE;
             const r = source[i], g = source[i + 1], b = source[i + 2];
-            const isAccent = isSockAccent(r, g, b);
-            if (isAccent) {
-                if (!keepAccent) {
-                    // Original accent is a mid-red. Scale the selected color by its
-                    // original local brightness to keep red-patch texture/folds.
-                    const light = r / 204;
-                    out[i] = clampByte(accent[0] * light);
-                    out[i + 1] = clampByte(accent[1] * light);
-                    out[i + 2] = clampByte(accent[2] * light);
-                }
-            } else {
-                if (!keepBody) {
-                    // Multiply, rather than replace, so the knitted shading survives.
-                    out[i] = clampByte(r * body[0] / 255);
-                    out[i + 1] = clampByte(g * body[1] / 255);
-                    out[i + 2] = clampByte(b * body[2] / 255);
-                }
-                // Avoid patterning black outlines and deeply shaded folds.
-                const brightness = (r + g + b) / 3;
-                if (patternId !== 'plain' && brightness > 140 && source[i + 3] > 32) {
-                    const amount = patternOpacity(patternId, x % FRAME_SIZE, localY) * 0.86;
-                    if (amount > 0) {
-                        // Retain the source fabric shadows underneath each mark.
-                        const shading = Math.min(1.08, brightness / 228);
-                        out[i] = clampByte(out[i] * (1 - amount) + pattern[0] * shading * amount);
-                        out[i + 1] = clampByte(out[i + 1] * (1 - amount) + pattern[1] * shading * amount);
-                        out[i + 2] = clampByte(out[i + 2] * (1 - amount) + pattern[2] * shading * amount);
-                    }
-                }
+            const toe = toeOpacity(r, g, b);
+            const light = r / 204;
+            // Remove baked-in red before applying body color, so OFF is neutral fabric.
+            const nr = r * (1 - toe) + 242 * light * toe;
+            const ng = g * (1 - toe) + 230 * light * toe;
+            const nb = b * (1 - toe) + 216 * light * toe;
+            const brightness = (nr + ng + nb) / 3;
+            const cuff = cuffBandOpacity(localX, localY, frameBounds[Math.floor(y / FRAME_SIZE) * columns + Math.floor(x / FRAME_SIZE)]);
+            const accentAmount = Math.max(style?.toesEnabled === false ? 0 : toe,
+                style?.cuffEnabled === false ? 0 : cuff);
+            const shading = Math.min(1.08, brightness / 228);
+            const mark = tile && brightness > 140 && source[i + 3] > 32
+                ? tile[(localY % 192) * 192 + localX % 192] * 0.86 * (1 - accentAmount) : 0;
+            for (let channel = 0; channel < 3; channel++) {
+                const fabric = (channel === 0 ? nr : channel === 1 ? ng : nb) * body[channel] / 255;
+                const colored = fabric * (1 - accentAmount) + accent[channel] * shading * accentAmount;
+                out[i + channel] = byte(colored * (1 - mark) + pattern[channel] * shading * mark);
             }
         }
     }
@@ -119,6 +125,7 @@ function readSource(scene) {
             height: image.height,
             pixels: context.getImageData(0, 0, image.width, image.height).data
         };
+        sourceCache.bounds = getSockFrameBounds(sourceCache.pixels, image.width, image.height);
     }
     return sourceCache;
 }
@@ -129,7 +136,7 @@ function readSource(scene) {
  */
 export function applySockStyle(scene, style) {
     const original = readSource(scene);
-    const colorized = recolorSockPixels(original.pixels, original.width, original.height, style);
+    const colorized = recolorSockPixels(original.pixels, original.width, original.height, style, original.bounds);
     let texture;
     let canvas;
     if (scene.textures.exists(CUSTOM_SOCK_TEXTURE)) {

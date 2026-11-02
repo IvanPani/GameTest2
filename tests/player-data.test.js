@@ -84,7 +84,8 @@ test('corrupt and future saves are preserved; malformed fields are validated', (
     assert.equal(saved.currency, 0);
     assert.equal(saved.upgrades.fabric, 0);
     assert.equal(saved.sockStyle.patternId, 'plain');
-    assert.deepEqual(saved.unlocks.patterns, ['plain', 'dots', 'stripes']);
+    assert.ok(['plain', 'dots', 'stripes', 'stars', 'crescents', 'skulls', 'spirals'].every(id => saved.unlocks.patterns.includes(id)));
+    assert.equal(saved.unlocks.patterns.some(id => typeof id !== 'string'), false);
 });
 
 test('unavailable and full storage do not crash, and display a save error', () => {

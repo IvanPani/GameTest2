@@ -25,7 +25,7 @@ test('two patterns are distinct and plain pattern does nothing', () => {
   assert.equal(patternOpacity('plain', 20, 20), 0);
   assert.equal(patternOpacity('dots', 18, 13) >= 0, true);
   assert.equal(patternOpacity('stripes', 0, 0), 1);
-  assert.equal(patternOpacity('stripes', 20, 0), 0);
+  assert.equal(patternOpacity('stripes', 0, 20), 0);
 });
 
 test('white/plain original body is retained for default style', () => {

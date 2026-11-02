@@ -1,4 +1,5 @@
 import { UPGRADES } from './upgrades.js';
+import { SOCK_COLORS, SOCK_PATTERNS } from './sock-customization.js';
 import { defaultRecords, validateRecords, recordCompletedRun } from './records.js';
 
 export const SAVE_KEY = 'falling-socks.player.v1';
@@ -13,8 +14,8 @@ export function defaultProfile() {
         currency: 0,
         records: defaultRecords(),
         upgrades: { fabric: 0, steering: 0 },
-        sockStyle: { bodyColor: '#ffffff', accentColor: '#cc655a', patternId: 'plain', patternColor: '#ffffff' },
-        unlocks: { colors: ['#ffffff', '#cc655a', '#8bc78b', '#eecb68'], patterns: ['plain', 'dots', 'stripes'], cosmetics: [] },
+        sockStyle: { bodyColor: '#ffffff', accentColor: '#e34b4b', patternId: 'plain', patternColor: '#ffffff', toesEnabled: true, cuffEnabled: true },
+        unlocks: { colors: [...SOCK_COLORS.map(color => color.hex), '#cc655a', '#8bc78b', '#eecb68'], patterns: SOCK_PATTERNS.map(pattern => pattern.id), cosmetics: [] },
         activeRunId: null
     };
 }
@@ -35,6 +36,9 @@ function validate(raw) {
         if (result.unlocks.colors.includes(raw.sockStyle?.[key])) result.sockStyle[key] = raw.sockStyle[key];
     }
     if (result.unlocks.patterns.includes(raw.sockStyle?.patternId)) result.sockStyle.patternId = raw.sockStyle.patternId;
+    for (const key of ['toesEnabled', 'cuffEnabled']) {
+        if (typeof raw.sockStyle?.[key] === 'boolean') result.sockStyle[key] = raw.sockStyle[key];
+    }
     if (typeof raw.activeRunId === 'string') result.activeRunId = raw.activeRunId;
     return result;
 }
@@ -140,6 +144,11 @@ export class PlayerData {
         const next = this.getProfile();
         for (const [key, value] of Object.entries(style)) {
             if (!Object.hasOwn(next.sockStyle, key)) return false;
+            if (['toesEnabled', 'cuffEnabled'].includes(key)) {
+                if (typeof value !== 'boolean') return false;
+                next.sockStyle[key] = value;
+                continue;
+            }
             const owned = key === 'patternId' ? next.unlocks.patterns : next.unlocks.colors;
             if (!owned.includes(value)) return false;
             next.sockStyle[key] = value;

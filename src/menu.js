@@ -4,6 +4,7 @@ import { UPGRADES, getRunStats } from './upgrades.js';
 import { getUpgradeProgress } from './upgrade-progress.js';
 import { SOCK_VISUALS } from './player.js';
 import { CUSTOM_SOCK_TEXTURE, applySockStyle } from './sock-skin.js';
+import { SOCK_COLORS, SOCK_PATTERNS } from './sock-customization.js';
 
 const WIDTH = 400;
 const HEIGHT = 700;
@@ -126,57 +127,68 @@ export default class Menu extends Phaser.Scene {
         this.button(panel, 'customize', 200, 645, 'MAIN MENU  /  DOWN', () => this.navigate('main'), 280);
     }
 
-    // Temporary customization controls in the actual clothesline room.
-    // Any style change refreshes the shared cached texture, so both hub socks
-    // and the next gameplay Player immediately use the same selected colors.
     createSkinControls(panel) {
-        const colors = ['#ffffff', '#cc655a', '#8bc78b', '#eecb68'];
-        const patterns = ['plain', 'dots', 'stripes'];
-        this.skinSwatches = [];
+        this.skinColorControls = [];
         this.skinPatternButtons = [];
-        const register = (element) => {
+        this.skinToggleButtons = [];
+        const register = element => {
             panel.add(element);
             this.controls.push({ room: 'customize', button: element });
             return element;
         };
-        const choose = (partial) => {
+        const choose = partial => {
             if (this.location !== 'customize' || this.transitioning || this.starting) return;
             if (!playerData.selectStyle(partial)) return;
             applySockStyle(this, playerData.getProfile().sockStyle);
             this.updateSkinSelection();
         };
-        for (const [label, property, y] of [
-            ['BODY', 'bodyColor', 405],
-            ['ACCENT', 'accentColor', 449],
-            ['PATTERN COLOR', 'patternColor', 493]
-        ]) {
-            this.label(panel, 74, y, label, label === 'PATTERN COLOR' ? 12 : 15);
-            for (const [index, color] of colors.entries()) {
-                const swatch = register(this.add.rectangle(186 + index * 44, y, 29, 29,
-                    Phaser.Display.Color.HexStringToColor(color).color)
-                    .setInteractive({ useHandCursor: true }));
-                swatch.on('pointerdown', () => choose({ [property]: color }));
-                this.skinSwatches.push({ swatch, property, color });
-            }
-        }
-        this.label(panel, 71, 547, 'PATTERN', 15);
-        for (const [index, id] of patterns.entries()) {
-            const button = register(this.add.text(171 + index * 76, 547, id.toUpperCase(), {
-                ...TEXT, fontSize: '13px', backgroundColor: '#35566c',
-                padding: { x: 7, y: 9 }
+        const smallButton = (x, y, text, action, width = 42) => {
+            const button = register(this.add.text(x, y, text, {
+                ...TEXT, fontSize: '16px', backgroundColor: '#35566c', align: 'center',
+                fixedWidth: width, padding: { x: 4, y: 8 }
             }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
-            button.on('pointerdown', () => choose({ patternId: id }));
-            this.skinPatternButtons.push({ button, id });
+            button.on('pointerdown', action);
+            return button;
+        };
+        for (const [property, title, x] of [['toesEnabled', 'TOES', 108], ['cuffEnabled', 'CUFF BAND', 290]]) {
+            const button = smallButton(x, 361, '', () => choose({ [property]: !playerData.getProfile().sockStyle[property] }), 160);
+            this.skinToggleButtons.push({ property, title, button });
         }
-        this.label(panel, 200, 597, 'PREVIEW  •  SAVES AUTOMATICALLY', 12, '#8fe0d4');
+        for (const [title, property, y] of [['SOCK', 'bodyColor', 405], ['TOES / BAND', 'accentColor', 449], ['PATTERN', 'patternColor', 493]]) {
+            this.label(panel, 60, y, title, title === 'TOES / BAND' ? 11 : 14);
+            const cycle = direction => {
+                const current = playerData.getProfile().sockStyle[property];
+                const index = SOCK_COLORS.findIndex(color => color.hex === current);
+                const next = index < 0 ? (direction > 0 ? 0 : SOCK_COLORS.length - 1)
+                    : (index + direction + SOCK_COLORS.length) % SOCK_COLORS.length;
+                choose({ [property]: SOCK_COLORS[next].hex });
+            };
+            smallButton(132, y, '<', () => cycle(-1));
+            const swatch = this.add.rectangle(177, y, 24, 24, 0xffffff).setStrokeStyle(1, 0xb8c7d2);
+            panel.add(swatch);
+            const name = this.label(panel, 252, y, '', 14);
+            smallButton(348, y, '>', () => cycle(1));
+            this.skinColorControls.push({ property, swatch, name });
+        }
+        for (const [index, pattern] of SOCK_PATTERNS.entries()) {
+            const x = 74 + (index % 4) * 84;
+            const y = 541 + Math.floor(index / 4) * 39;
+            const button = smallButton(x, y, pattern.name, () => choose({ patternId: pattern.id }), 78).setFontSize(12);
+            this.skinPatternButtons.push({ button, id: pattern.id });
+        }
+        this.label(panel, 200, 611, 'LIVE PREVIEW  /  SAVES AUTOMATICALLY', 10, '#8fe0d4');
         this.updateSkinSelection();
     }
 
     updateSkinSelection() {
         const style = playerData.getProfile().sockStyle;
-        for (const { swatch, property, color } of this.skinSwatches || []) {
-            const active = style[property] === color;
-            swatch.setStrokeStyle(active ? 3 : 1, active ? 0xffd370 : 0xb8c7d2);
+        for (const { property, swatch, name } of this.skinColorControls || []) {
+            swatch.setFillStyle(Phaser.Display.Color.HexStringToColor(style[property]).color);
+            name.setText(SOCK_COLORS.find(color => color.hex === style[property])?.name || 'Saved color');
+        }
+        for (const { property, title, button } of this.skinToggleButtons || []) {
+            button.setText(`${title}: ${style[property] ? 'ON' : 'OFF'}`);
+            button.setBackgroundColor(style[property] ? '#527a86' : '#35566c');
         }
         for (const { button, id } of this.skinPatternButtons || []) {
             button.setBackgroundColor(style.patternId === id ? '#709aaa' : '#35566c');
