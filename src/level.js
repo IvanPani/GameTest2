@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import Player from './player.js';
+import { COMBO, getComboMultiplier } from './combo.js';
 import { silhouettesOverlap } from './silhouette-collision.js';
 import { MOVEMENT, getWeight, getFallSpeed, getSpeedKmh, steer } from './movement.js';
 
@@ -7,6 +8,25 @@ const WIDTH = 400;
 const HEIGHT = 700;
 const PLAYER_Y_RATIO = 0.23;
 const MAX_HEALTH = 3;
+const MULTIPLIER_STYLE = Object.freeze({
+    fontSize: 24,
+    yellow: '#fff200',
+    orange: '#ff8500',
+    red: '#ff244f',
+    magenta: '#ff2bff',
+    topTierPopScale: 1.25,
+    outline: '#07121f',
+    outlineWidth: 3,
+    popScale: 1.18,
+    popDurationMs: 120,
+    // Pulse strength rises with the multiplier; duration is each half-cycle.
+    pulseByMultiplier: Object.freeze({
+        2: { scale: 1.025, durationMs: 900 },
+        3: { scale: 1.045, durationMs: 700 },
+        4: { scale: 1.075, durationMs: 500 },
+        5: { scale: 1.10, durationMs: 400 }
+    })
+});
 // Background moves more slowly than hazards to give the tunnel depth.
 const BACKGROUND_SCROLL_RATIO = 0.02;
 // Distances in pixels: match the original spawn cadence at 190 px/s.
@@ -18,6 +38,16 @@ const SPAWNING = Object.freeze({
     buttonGapMin: 190,
     buttonGapMax: 295,
     clearance: 24
+});
+
+// Delays begin once the previous tutorial object is collected or passes the sock.
+const INTRO = Object.freeze({
+    steps: [
+        { type: 'button', delayMs: 3000, offsetX: 0 },
+        { type: 'button', delayMs: 1000, offsetX: 70 },
+        { type: 'soap', delayMs: 1500, offsetX: 0 }
+    ],
+    normalFlowDelayMs: 3000
 });
 
 export default class Level extends Phaser.Scene {
@@ -38,11 +68,20 @@ export default class Level extends Phaser.Scene {
         this.obstacles = [];
         this.collectibles = [];
         this.elapsed = 0;
+        this.introStep = 0;
+        this.introWaitMs = INTRO.steps[0].delayMs;
+        this.introEncounter = null;
+        this.introComplete = false;
         this.obstacleDistance = SPAWNING.firstObstacleDistance;
         this.collectibleDistance = SPAWNING.firstButtonDistance;
         this.damageTimer = 0;
         this.score = 0;
-        this.weight = getWeight(this.score);
+        this.buttonsCollected = 0;
+        this.combo = 0;
+        this.testMultiplier = 1;
+        this.maxCombo = 0;
+        this.consecutiveMisses = 0;
+        this.weight = getWeight(this.buttonsCollected);
         this.health = MAX_HEALTH;
 
         this.createHud();
@@ -72,8 +111,8 @@ export default class Level extends Phaser.Scene {
     }
 
     createHud() {
-        this.add.rectangle(WIDTH / 2, 48, WIDTH, 96, 0x102131, 0.96).setDepth(10);
-        this.add.text(12, 15, 'Fabric', this.hudStyle(15, '#f3f6ed')).setDepth(11);
+        this.add.rectangle(WIDTH / 2, 54, WIDTH, 108, 0x102131, 0.96).setDepth(10);
+        this.add.text(12, 15, 'FABRIC', this.hudStyle(15, '#f3f6ed')).setDepth(11);
         this.hearts = Array.from({ length: MAX_HEALTH }, (_, index) => {
             const heart = this.add.graphics({ x: 22 + index * 24, y: 56 }).setDepth(11);
             // Draw hearts as geometry so they stay red on every platform/font.
@@ -89,10 +128,17 @@ export default class Level extends Phaser.Scene {
             heart.fillPoints(points, true);
             return heart;
         });
-        this.add.text(WIDTH - 12, 15, 'Score', this.hudStyle(15, '#f3f6ed'))
+        this.add.text(WIDTH - 12, 15, 'SCORE', this.hudStyle(15, '#f3f6ed'))
             .setOrigin(1, 0).setDepth(11);
-        this.scoreText = this.add.text(WIDTH - 12, 45, '', this.hudStyle(22, '#f3f6ed'))
+        this.scoreText = this.add.text(WIDTH - 12, 38, '', this.hudStyle(22, '#f3f6ed'))
             .setOrigin(1, 0).setDepth(11);
+        this.comboText = this.add.text(WIDTH - 12, 104, '', {
+            ...this.hudStyle(MULTIPLIER_STYLE.fontSize, MULTIPLIER_STYLE.yellow),
+            stroke: MULTIPLIER_STYLE.outline,
+            strokeThickness: MULTIPLIER_STYLE.outlineWidth,
+            padding: { left: 4, right: 4, top: 4, bottom: 4 }
+        }).setOrigin(1, 1).setDepth(12);
+        this.displayedMultiplier = 1;
         this.weightText = this.add.text(WIDTH / 2, 18, '', this.hudStyle(14, '#8fe0d4'))
             .setOrigin(0.5, 0).setDepth(11);
         this.speedText = this.add.text(WIDTH / 2, 49, '', this.hudStyle(14, '#8fe0d4'))
@@ -111,14 +157,67 @@ export default class Level extends Phaser.Scene {
 
     updateHud() {
         this.scoreText.setText(`${this.score}`);
-        this.weightText.setText(`Weight  ${this.weight.toFixed(1)} kg`);
-        this.speedText.setText(`Speed  ${getSpeedKmh(this.score).toFixed(1)} km/h`);
+        const multiplier = this.getActiveMultiplier();
+        this.updateMultiplier(multiplier);
+        this.weightText.setText(`WEIGHT  ${this.weight.toFixed(1)} KG`);
+        this.speedText.setText(`SPEED  ${getSpeedKmh(this.buttonsCollected).toFixed(1)} KM/H`);
         this.hearts.forEach((heart, index) => {
             heart.setAlpha(index < this.health ? 1 : 0.2);
         });
     }
 
-    spawnObstacle() {
+    getActiveMultiplier() {
+        return Math.max(getComboMultiplier(this.combo), this.testMultiplier);
+    }
+
+    advanceTestMultiplier() {
+        if (!COMBO.keyboardTestingEnabled) return;
+        const maxMultiplier = COMBO.multiplierThresholds.length + 1;
+        this.testMultiplier = Math.min(this.getActiveMultiplier() + 1, maxMultiplier);
+        this.updateHud();
+    }
+
+    updateMultiplier(multiplier) {
+        this.comboText.setText(multiplier > 1 ? `${multiplier}X` : '');
+        this.comboText.setColor(multiplier >= 5 ? MULTIPLIER_STYLE.magenta
+            : multiplier === 4 ? MULTIPLIER_STYLE.red
+            : multiplier === 3 ? MULTIPLIER_STYLE.orange : MULTIPLIER_STYLE.yellow);
+        this.comboText.setVisible(multiplier > 1);
+        if (multiplier === this.displayedMultiplier) return;
+
+        this.tweens.killTweensOf(this.comboText);
+        this.comboText.setScale(1);
+        const increased = multiplier > this.displayedMultiplier;
+        this.displayedMultiplier = multiplier;
+        if (multiplier <= 1) return;
+
+        const startPulse = () => {
+            if (this.displayedMultiplier !== multiplier || multiplier < 2) return;
+            const pulse = MULTIPLIER_STYLE.pulseByMultiplier[multiplier];
+            this.tweens.add({
+                targets: this.comboText,
+                scale: pulse.scale,
+                duration: pulse.durationMs,
+                ease: 'Sine.easeInOut',
+                yoyo: true,
+                repeat: -1
+            });
+        };
+        if (increased) {
+            this.tweens.add({
+                targets: this.comboText,
+                scale: multiplier === 5 ? MULTIPLIER_STYLE.topTierPopScale : MULTIPLIER_STYLE.popScale,
+                duration: MULTIPLIER_STYLE.popDurationMs,
+                ease: 'Quad.easeOut',
+                yoyo: true,
+                onComplete: startPulse
+            });
+        } else {
+            startPulse();
+        }
+    }
+
+    spawnObstacle(preferredX = null) {
         const frames = ['small', 'medium', 'large'];
         const frame = frames[Phaser.Math.Between(0, frames.length - 1)];
         const textureFrame = this.textures.getFrame('soap', frame);
@@ -131,21 +230,30 @@ export default class Level extends Phaser.Scene {
         // Rotated bounds keep spawns apart; silhouette masks decide actual contact.
         const width = Math.abs(Math.cos(radians)) * displayWidth + Math.abs(Math.sin(radians)) * displayHeight;
         const height = Math.abs(Math.sin(radians)) * displayWidth + Math.abs(Math.cos(radians)) * displayHeight;
-        const x = this.findSpawnX(width, height, HEIGHT + height, 42 + width / 2, WIDTH - 42 - width / 2);
+        const minX = 42 + width / 2;
+        const maxX = WIDTH - 42 - width / 2;
+        const requestedX = preferredX === null ? null : Phaser.Math.Clamp(Math.round(preferredX), Math.ceil(minX), Math.floor(maxX));
+        const x = this.findSpawnX(width, height, HEIGHT + height,
+            requestedX ?? minX, requestedX ?? maxX);
         if (x === null) return;
         const shape = this.add.image(x, HEIGHT + height, 'soap', frame)
             .setScale(scale).setAngle(angle).setDepth(1);
-        this.obstacles.push({ shape, width, height });
+        const obstacle = { shape, width, height };
+        this.obstacles.push(obstacle);
+        return obstacle;
     }
 
-    spawnCollectible() {
-        const x = this.findSpawnX(34, 34, HEIGHT + 24, 54, WIDTH - 54);
+    spawnCollectible(preferredX = null) {
+        const requestedX = preferredX === null ? null : Phaser.Math.Clamp(Math.round(preferredX), 54, WIDTH - 54);
+        const x = this.findSpawnX(34, 34, HEIGHT + 24, requestedX ?? 54, requestedX ?? (WIDTH - 54));
         if (x === null) return;
         const shape = this.add.image(x, HEIGHT + 24, 'button')
             .setDisplaySize(38, 38)
             .setAngle(Phaser.Math.Between(0, 359))
             .setDepth(1);
-        this.collectibles.push({ shape, width: 34, height: 34 });
+        const collectible = { shape, width: 34, height: 34 };
+        this.collectibles.push(collectible);
+        return collectible;
     }
 
     update(_time, delta) {
@@ -153,12 +261,20 @@ export default class Level extends Phaser.Scene {
         this.elapsed += delta;
         this.damageTimer = Math.max(0, this.damageTimer - delta);
 
+        if (COMBO.keyboardTestingEnabled && this.cursors?.up
+            && Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+            this.advanceTestMultiplier();
+        }
         this.movePlayer(seconds);
 
-        const fallSpeed = getFallSpeed(this.score);
+        const fallSpeed = getFallSpeed(this.buttonsCollected);
         this.scrollShaft(fallSpeed * seconds);
         this.moveObjects(fallSpeed * seconds);
-        this.updateSpawns(fallSpeed * seconds);
+        if (this.introComplete) {
+            this.updateSpawns(fallSpeed * seconds);
+        } else {
+            this.updateIntro(seconds * 1000);
+        }
 
         if (this.damageTimer === 0) {
             this.player.setAlpha(1);
@@ -223,6 +339,33 @@ export default class Level extends Phaser.Scene {
         return candidates.length ? candidates[Phaser.Math.Between(0, candidates.length - 1)] : null;
     }
 
+    updateIntro(deltaMs) {
+        if (this.introEncounter) {
+            const { object, type } = this.introEncounter;
+            const objects = type === 'button' ? this.collectibles : this.obstacles;
+            const passedSock = object.shape.y + object.height / 2
+                < this.player.y - this.player.sock.displayHeight / 2;
+            if (objects.includes(object) && !passedSock) return;
+            this.introEncounter = null;
+            this.introWaitMs = INTRO.steps[this.introStep]?.delayMs ?? INTRO.normalFlowDelayMs;
+            return;
+        }
+
+        this.introWaitMs = Math.max(0, this.introWaitMs - deltaMs);
+        if (this.introWaitMs > 0) return;
+        const step = INTRO.steps[this.introStep];
+        if (!step) {
+            this.introComplete = true;
+            return;
+        }
+        // Place each lesson relative to the sock's current position.
+        const x = this.player.x + step.offsetX;
+        const object = step.type === 'button' ? this.spawnCollectible(x) : this.spawnObstacle(x);
+        if (!object) return; // Retry if an earlier, already-passed object blocks spawning.
+        this.introEncounter = { object, type: step.type };
+        this.introStep += 1;
+    }
+
     updateSpawns(distance) {
         this.obstacleDistance -= distance;
         this.collectibleDistance -= distance;
@@ -247,10 +390,19 @@ export default class Level extends Phaser.Scene {
                 this.obstacles.splice(index, 1);
                 if (this.damageTimer === 0) {
                     this.health -= 1;
+                    this.combo = 0;
+                    this.testMultiplier = 1;
+                    this.consecutiveMisses = 0;
                     this.damageTimer = MOVEMENT.damageInvulnerabilityMs;
                     this.updateHud();
                     if (this.health <= 0) {
-                        this.scene.start('end', { score: this.score, weight: this.weight });
+                        this.scene.start('end', {
+                            score: this.score,
+                            weight: this.weight,
+                            speedKmh: getSpeedKmh(this.buttonsCollected),
+                            totalButtons: this.buttonsCollected,
+                            maxCombo: this.maxCombo
+                        });
                         return;
                     }
                 }
@@ -267,13 +419,31 @@ export default class Level extends Phaser.Scene {
             if (this.overlapsPlayer(collectible)) {
                 collectible.shape.destroy();
                 this.collectibles.splice(index, 1);
-                this.score += 1;
-                this.weight = getWeight(this.score);
-                this.player.setButtonCount(this.score);
+                this.buttonsCollected += 1;
+                this.combo += 1;
+                this.maxCombo = Math.max(this.maxCombo, this.combo);
+                this.consecutiveMisses = 0;
+                this.score += COMBO.pointsPerButton * this.getActiveMultiplier();
+                this.weight = getWeight(this.buttonsCollected);
+                this.player.setButtonCount(this.buttonsCollected);
                 this.updateHud();
-            } else if (collectible.shape.y < -collectible.height) {
-                collectible.shape.destroy();
-                this.collectibles.splice(index, 1);
+            } else {
+                // Count each missed button once as soon as it fully passes the sock.
+                if (!collectible.missed
+                    && collectible.shape.getBounds().bottom < this.player.sock.getBounds().top) {
+                    collectible.missed = true;
+                    this.consecutiveMisses += 1;
+                    if (this.consecutiveMisses >= COMBO.missesBeforeReset) {
+                        this.combo = 0;
+                        this.testMultiplier = 1;
+                        this.consecutiveMisses = 0;
+                    }
+                    this.updateHud();
+                }
+                if (collectible.shape.y < -collectible.height) {
+                    collectible.shape.destroy();
+                    this.collectibles.splice(index, 1);
+                }
             }
         }
     }
