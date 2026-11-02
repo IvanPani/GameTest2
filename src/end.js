@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { playerData } from './player-data.js';
 
 export default class End extends Phaser.Scene {
     constructor() {
@@ -10,6 +11,7 @@ export default class End extends Phaser.Scene {
     }
 
     create() {
+        this.leaving = false;
         this.cameras.main.setBackgroundColor('#182b3d');
         this.add.rectangle(200, 350, 340, 420, 0x102131, 0.98)
             .setStrokeStyle(2, 0x49677c);
@@ -37,23 +39,36 @@ export default class End extends Phaser.Scene {
             color: '#f3f6ed'
         }).setOrigin(0.5);
 
-        this.add.text(200, 485, 'TAP TO TRY AGAIN', {
+        this.add.text(200, 485, 'TAP FOR MAIN MENU', {
             fontFamily: 'Fredoka, sans-serif',
             fontSize: '18px',
             fontStyle: 'bold',
             color: '#ffcf70'
         }).setOrigin(0.5);
-        this.add.text(200, 525, 'PRESS ANY KEY TO RESTART', {
+        this.add.text(200, 525, 'PRESS ANY KEY FOR MENU', {
             fontFamily: 'Fredoka, sans-serif',
             fontSize: '14px',
             color: '#b8c7d2'
         }).setOrigin(0.5);
 
-        this.input.on('pointerdown', this.restart, this);
+        this.add.text(200, 455, `+${this.result.score} CURRENCY`, {
+            fontFamily: 'Fredoka, sans-serif', fontSize: '18px', color: '#8fe0d4'
+        }).setOrigin(0.5);
+        if (playerData.saveError) this.add.text(200, 610, playerData.saveError, {
+            fontFamily: 'Fredoka, sans-serif', fontSize: '16px', color: '#ffcf70',
+            align: 'center', wordWrap: { width: 350 }
+        }).setOrigin(0.5);
+        this.input.once('pointerdown', this.restart, this);
         this.input.keyboard?.once('keydown', this.restart, this);
+        this.events.once('shutdown', () => {
+            this.input.off('pointerdown', this.restart, this);
+            this.input.keyboard?.off('keydown', this.restart, this);
+        });
     }
 
     restart() {
-        this.scene.start('level');
+        if (this.leaving) return;
+        this.leaving = true;
+        this.scene.start('menu');
     }
 }

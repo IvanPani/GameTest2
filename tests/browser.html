@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Player data scene checks</title>
+<style>body { background:#182b3d; color:white; font:16px sans-serif } button { padding:12px } #juego { width:400px; height:700px } pre { white-space:pre-wrap }</style>
+<button id="check">Run scene checks</button>
+<pre id="result">Loading game…</pre>
+<div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';
+import Boot from '../src/boot.js';
+import Menu from '../src/menu.js';
+import Level from '../src/level.js';
+import End from '../src/end.js';
+import { playerData } from '../src/player-data.js';
+
+// Test-only harness. Production entry does not import this file.
+// Collision geometry is outside this check: force overlap to exercise the real
+// pickup/death paths deterministically, without waiting for random spawns.
+const game = new Phaser.Game({ type: Phaser.AUTO, width:400, height:700,
+    parent:'juego', scene:[Boot, Menu, Level, End], audio:{noAudio:true} });
+const output = document.querySelector('#result');
+const frame = () => new Promise(resolve => game.events.once('poststep', resolve));
+async function frames() { await frame(); await frame(); }
+const assert = (ok, message) => { if (!ok) throw new Error(message); };
+async function ready() {
+    while (!game.scene.isActive('menu')) await frame();
+    const expected = sessionStorage.getItem('scene-check-currency');
+    assert(expected === null || playerData.getProfile().currency === Number(expected), 'Reload lost currency');
+    output.textContent = `Ready. Currency: ${playerData.getProfile().currency}.` + (expected === null ? '' : ' PASS: currency survived page reload.');
+}
+ready().catch(error => { output.textContent = `FAIL: ${error.message}`; });
+document.querySelector('#check').onclick = async () => {
+    try {
+        const initial = playerData.getProfile().currency;
+        game.scene.start('level');
+        await frames();
+        const level = game.scene.getScene('level');
+        level.update = () => {}; // Stop random encounters in this test instance.
+        assert(level.score === 0 && level.buttonsCollected === 0 && level.weight === 0, 'Fresh run is not empty');
+        level.overlapsPlayer = () => true;
+        level.spawnCollectible();
+        level.moveObjects(0);
+        assert(level.score === 10 && level.buttonsCollected === 1 && level.weight === 0.6, 'Pickup mixed score and load');
+        const runId = level.runId;
+        level.health = 1;
+        level.damageTimer = 0;
+        level.spawnObstacle();
+        level.moveObjects(0);
+        await frames();
+        assert(game.scene.isActive('end'), 'Death did not reach results');
+        assert(playerData.getProfile().currency === initial + 10, 'Death did not bank score');
+        assert(!playerData.completeRun(runId, 10), 'Duplicate settlement accepted');
+        game.scene.getScene('end').restart();
+        await frames();
+        assert(game.scene.isActive('menu'), 'Results did not return to menu');
+        game.scene.start('level');
+        await frames();
+        assert(level.score === 0 && level.buttonsCollected === 0 && level.weight === 0, 'Retry inherited score or load');
+        assert(level.input.listenerCount('pointerdown') === 1 && level.input.listenerCount('pointermove') === 1, 'Retry duplicated pointer listeners');
+        game.scene.start('menu');
+        await frames();
+        sessionStorage.setItem('scene-check-currency', String(initial + 10));
+        output.textContent = `PASS: fresh run, actual pickup scoring/load, death, one payout, menu return, empty retry, listener cleanup. Currency: ${initial + 10}. Reload this page to verify persistence.`;
+    } catch (error) { output.textContent = `FAIL: ${error.stack}`; }
+};
+</script>
+</html>

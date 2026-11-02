@@ -8,14 +8,15 @@
         "build:electron": "npm i && npx vite build -c electron.vite.config.js",
         "release:electron": "npm i && npm run build:electron && electron-builder --publish never",
         "start": "npm i && npx vite",
-        "build": "npm i && npx vite build --outDir docs/"
+        "build": "npm i && npx vite build --outDir docs/",
+        "test": "node --test tests/*.test.js"
     },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/cleongh/plantillaphaser.git"
     },
     "keywords": [],
-    "author": "Carlos León <cleon@ucm.es>",
+    "author": "Carlos Le\u00f3n <cleon@ucm.es>",
     "license": "MIT",
     "bugs": {
         "url": "https://github.com/cleongh/plantillaphaser/issues"

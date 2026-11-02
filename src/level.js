@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import Player from './player.js';
+import { playerData } from './player-data.js';
 import { COMBO, getComboMultiplier } from './combo.js';
 import { silhouettesOverlap } from './silhouette-collision.js';
 import { MOVEMENT, getWeight, getFallSpeed, getSpeedKmh, steer } from './movement.js';
@@ -56,6 +57,8 @@ export default class Level extends Phaser.Scene {
     }
 
     create() {
+        this.runId = playerData.beginRun();
+        this.runEnded = false;
         this.cameras.main.setBackgroundColor('#182b3d');
         this.createShaft();
 
@@ -86,15 +89,21 @@ export default class Level extends Phaser.Scene {
 
         this.createHud();
 
-        this.input.on('pointerdown', (pointer) => {
+        const onPointerDown = (pointer) => {
             this.targetX = pointer.x;
             this.pointerSteering = true;
-        });
-        this.input.on('pointermove', (pointer) => {
+        };
+        const onPointerMove = (pointer) => {
             if (pointer.isDown) {
                 this.targetX = pointer.x;
                 this.pointerSteering = true;
             }
+        };
+        this.input.on('pointerdown', onPointerDown);
+        this.input.on('pointermove', onPointerMove);
+        this.events.once('shutdown', () => {
+            this.input.off('pointerdown', onPointerDown);
+            this.input.off('pointermove', onPointerMove);
         });
     }
 
@@ -257,6 +266,7 @@ export default class Level extends Phaser.Scene {
     }
 
     update(_time, delta) {
+        if (this.runEnded) return;
         const seconds = Math.min(delta, 50) / 1000;
         this.elapsed += delta;
         this.damageTimer = Math.max(0, this.damageTimer - delta);
@@ -270,6 +280,7 @@ export default class Level extends Phaser.Scene {
         const fallSpeed = getFallSpeed(this.buttonsCollected);
         this.scrollShaft(fallSpeed * seconds);
         this.moveObjects(fallSpeed * seconds);
+        if (this.runEnded) return;
         if (this.introComplete) {
             this.updateSpawns(fallSpeed * seconds);
         } else {
@@ -396,6 +407,8 @@ export default class Level extends Phaser.Scene {
                     this.damageTimer = MOVEMENT.damageInvulnerabilityMs;
                     this.updateHud();
                     if (this.health <= 0) {
+                        this.runEnded = true;
+                        playerData.completeRun(this.runId, this.score);
                         this.scene.start('end', {
                             score: this.score,
                             weight: this.weight,

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { playerData } from './player-data.js';
 import { getFrameMask } from './silhouette-collision.js';
 
 const FALL_ANIMATION_FPS = 8;
@@ -48,6 +49,7 @@ export default class Boot extends Phaser.Scene {
         for (let frame = 0; frame < 30; frame += 1) getFrameMask(stages.get(frame));
         for (const name of ['small', 'medium', 'large']) getFrameMask(soap.get(name));
         getFrameMask(this.textures.getFrame('button'));
-        this.scene.start('level');
+        playerData.load();
+        this.scene.start('menu');
     }
 }
