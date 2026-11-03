@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import Player, { SOCK_VISUALS } from './player.js';
+import { pickupSoundKey, playGameSound } from './game-audio.js';
 import { chooseHazard } from './hazards.js';
 import { CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
 import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint } from './level-regions.js';
@@ -478,6 +479,7 @@ export default class Level extends Phaser.Scene {
                 this.obstacles.splice(index, 1);
                 if (this.damageTimer === 0) {
                     this.health -= 1;
+                    playGameSound(this, 'hazard-hit');
                     this.combo = 0;
                     this.pickupStreak = 0;
                     this.testMultiplier = 1;
@@ -511,7 +513,9 @@ export default class Level extends Phaser.Scene {
                 this.combo += 1;
                 this.maxCombo = Math.max(this.maxCombo, this.combo);
                 this.consecutiveMisses = 0;
-                this.score += COMBO.pointsPerButton * this.getActiveMultiplier();
+                const multiplier = this.getActiveMultiplier();
+                this.score += COMBO.pointsPerButton * multiplier;
+                playGameSound(this, pickupSoundKey(multiplier));
                 this.weight = getWeight(this.buttonsCollected);
                 this.player.setButtonCount(this.buttonsCollected);
                 this.updateHud();

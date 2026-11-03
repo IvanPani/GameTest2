@@ -14,7 +14,7 @@ test('all five hazard assets exist and regional tables contain only loaded dange
 
 test('weighted selection favors native hazards while retaining all earlier types', () => {
     const expected = [
-        {soap:30, 'rusty-nut':35, 'valve-wheel':35},
+        {soap:100},
         {soap:20, 'rusty-nut':40, 'valve-wheel':40},
         {soap:10, 'rusty-nut':10, 'valve-wheel':10, 'crushed-can':35, 'bottle-shard':35},
         {soap:8, 'rusty-nut':8, 'valve-wheel':8, 'crushed-can':8, 'bottle-shard':8, 'toy-block':60}
@@ -38,4 +38,18 @@ test('tight hazard bounds trim only outer padding, preserving holes and empty co
     assert.deepEqual(pixels, before);
     assert.equal(pixels[14], 0);
     assert.equal(getMaskBounds({width:6, height:6, pixels:new Uint8Array(36)}), null);
+});
+
+test('no future hazard leaks into an earlier area, including roll boundaries', () => {
+    const allowed = [
+        ['soap'],
+        ['soap', 'rusty-nut', 'valve-wheel'],
+        ['soap', 'rusty-nut', 'valve-wheel', 'crushed-can', 'bottle-shard'],
+        ['soap', 'rusty-nut', 'valve-wheel', 'crushed-can', 'bottle-shard', 'toy-block']
+    ];
+    for (let region = 0; region < allowed.length; region++) {
+        const selected = new Set();
+        for (let i = 0; i <= 1000; i++) selected.add(chooseHazard(region, () => i / 1000));
+        assert.deepEqual([...selected].sort(), allowed[region].sort());
+    }
 });

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { createCustomizeIcons } from './customize-icons.js';
 import { createRecordNotes } from './record-note.js';
 import { playerData } from './player-data.js';
 import { UPGRADES, getRunStats } from './upgrades.js';
@@ -240,10 +241,15 @@ export default class Menu extends Phaser.Scene {
             button.on('pointerdown', action);
             return button;
         };
+        createCustomizeIcons(this);
         for (const [property, title, x] of [['toesEnabled', 'TOES', 112], ['cuffEnabled', 'CUFF', 288]]) {
-            const button = addButtonImage(x, 340, 'customize-toggle-inactive', 154,
+            const button = addButtonImage(x, 340, 'customize-pattern-default', 154,
                 () => choose({ [property]: !playerData.getProfile().sockStyle[property] }));
-            const label = this.add.text(x + 17, 350, '', {
+            button.setDisplaySize(154, 49);
+            const icon = this.add.image(x - 48, 340, property === 'toesEnabled' ? 'customize-toe-icon' : 'customize-cuff-icon');
+            icon.setScale(38 / Math.max(icon.width, icon.height));
+            panel.add(icon);
+            const label = this.add.text(x + 17, 340, '', {
                 ...TEXT, fontSize: '13px', color: '#4b3027', align: 'center'
             }).setOrigin(0.5);
             panel.add(label);
@@ -285,16 +291,14 @@ export default class Menu extends Phaser.Scene {
         for (const [index, pattern] of SOCK_PATTERNS.entries()) {
             const x = 50 + (index % 4) * 100;
             const y = 545 + Math.floor(index / 4) * 36;
-            const key = `customize-pattern-${pattern.id === 'plain' ? 'none' : pattern.id === 'crescents' ? 'moons' : pattern.id}`;
-            const background = this.add.image(x, y, 'customize-pattern-default')
-                .setScale(88 / this.textures.get('customize-pattern-default').getSourceImage().width);
-            const button = this.add.image(x, y, key)
-                .setScale(84 / this.textures.get(key).getSourceImage().width)
-                .setInteractive({ useHandCursor: true });
-            register(button);
-            panel.add(background);
-            button.on('pointerdown', () => choose({ patternId: pattern.id }));
-            this.skinPatternButtons.push({ background, id: pattern.id });
+            const button = addButtonImage(x, y, 'customize-pattern-default', 84,
+                () => choose({ patternId: pattern.id }));
+            button.setDisplaySize(84, 34);
+            const label = this.add.text(x, y, pattern.name.toUpperCase(), {
+                ...TEXT, fontSize: '12px', color: '#3b2026'
+            }).setOrigin(0.5);
+            panel.add(label);
+            this.skinPatternButtons.push({ button, id: pattern.id });
         }
         const patternHeader = this.add.text(200, 511, 'CHOOSE A PATTERN', {
             ...TEXT, fontSize: '12px', color: '#fff0c8', stroke: '#45372b', strokeThickness: 3
@@ -313,13 +317,14 @@ export default class Menu extends Phaser.Scene {
         }
         for (const { property, title, button, label } of this.skinToggleButtons || []) {
             const active = style[property];
-            button.setTexture(active ? 'customize-toggle-active' : 'customize-toggle-inactive');
+            button.setTexture(active ? 'customize-pattern-selected' : 'customize-pattern-default')
+                .setDisplaySize(154, 49);
             label.setText(`${title}: ${active ? 'ON' : 'OFF'}`);
         }
-        for (const { background, id } of this.skinPatternButtons || []) {
+        for (const { button, id } of this.skinPatternButtons || []) {
             const selected = style.patternId === id;
-            background.setTexture(selected ? 'customize-pattern-selected' : 'customize-pattern-default');
-            background.setAlpha(selected ? 0.32 : 0);
+            button.setTexture(selected ? 'customize-pattern-selected' : 'customize-pattern-default')
+                .setDisplaySize(84, 34);
         }
     }
 

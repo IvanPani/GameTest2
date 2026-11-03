@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GAME_AUDIO } from './game-audio.js';
 import { HAZARD_ART, getMaskBounds } from './hazards.js';
 import { LEVEL_REGIONS } from './level-regions.js';
 import { MENU_ART, CUSTOMIZE_ART, UPGRADE_ART, RECORD_ART } from './menu-art.js';
@@ -15,6 +16,7 @@ export default class Boot extends Phaser.Scene {
     }
 
     preload() {
+        for (const [key, url] of GAME_AUDIO) this.load.audio(key, url);
         for (const [key, url] of [...MENU_ART, ...CUSTOMIZE_ART, ...UPGRADE_ART, ...RECORD_ART]) this.load.image(key, url);
         this.load.image('button', new URL('../assets/sprites/button.png', import.meta.url).href);
         for (const { key, url } of HAZARD_ART) this.load.image(key, url);

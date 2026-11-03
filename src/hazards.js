@@ -6,9 +6,11 @@ export const HAZARD_ART = Object.freeze([
     { key: 'toy-block', url: new URL('../assets/Falling_Socks_5_Hazard_Sprites (1)/toy_block.png', import.meta.url).href }
 ].map(Object.freeze));
 
-// Each table totals 100. Deeper areas retain every earlier danger.
+// Each table totals 100. The first area teaches soap only; Rusted Pipes
+// introduces metal hazards, Sewers introduces trash, and Pit introduces toys.
+// Deeper areas retain every earlier danger, with the newest family dominant.
 export const HAZARD_POOLS = Object.freeze([
-    [['soap', 30], ['rusty-nut', 35], ['valve-wheel', 35]],
+    [['soap', 100]],
     [['soap', 20], ['rusty-nut', 40], ['valve-wheel', 40]],
     [['soap', 10], ['rusty-nut', 10], ['valve-wheel', 10], ['crushed-can', 35], ['bottle-shard', 35]],
     [['soap', 8], ['rusty-nut', 8], ['valve-wheel', 8], ['crushed-can', 8], ['bottle-shard', 8], ['toy-block', 60]]
