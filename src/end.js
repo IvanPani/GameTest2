@@ -33,11 +33,9 @@ export default class End extends Phaser.Scene {
                 lineSpacing: 14
             }).setOrigin(0.5);
 
-        this.add.text(200, 420, `SCORE  ${this.result.score}`, {
-            fontFamily: 'Fredoka, sans-serif',
-            fontSize: '28px',
-            fontStyle: 'bold',
-            color: '#f3f6ed'
+        this.add.image(324, 35, 'customize-currency-badge').setDisplaySize(150, 44);
+        this.add.text(345, 35, playerData.getProfile().currency.toLocaleString('en-US'), {
+            fontFamily: 'Fredoka, sans-serif', fontSize: '14px', fontStyle: 'bold', color: '#4b3027'
         }).setOrigin(0.5);
 
         this.add.text(200, 485, 'TAP FOR MAIN MENU', {
@@ -52,7 +50,7 @@ export default class End extends Phaser.Scene {
             color: '#b8c7d2'
         }).setOrigin(0.5);
 
-        this.add.text(200, 455, `+${this.result.score} CURRENCY`, {
+        this.add.text(200, 420, `+${this.result.score} CURRENCY`, {
             fontFamily: 'Fredoka, sans-serif', fontSize: '18px', color: '#8fe0d4'
         }).setOrigin(0.5);
         const profile = playerData.getProfile();

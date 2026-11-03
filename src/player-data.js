@@ -109,10 +109,11 @@ export class PlayerData {
         return true;
     }
 
-    purchaseUpgrade(id) {
+    purchaseUpgrade(id, requestedLevel) {
         this.load();
         if (!Object.hasOwn(this.profile.upgrades, id)) return false;
         const level = this.profile.upgrades[id];
+        if (requestedLevel !== undefined && requestedLevel !== level + 1) return false;
         const price = UPGRADES[id]?.costs[level];
         if (!integer(price) || this.profile.currency < price) return false;
         const next = this.getProfile();

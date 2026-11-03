@@ -1,0 +1,75 @@
+{
+  "logicalViewport": {
+    "width": 400,
+    "height": 700
+  },
+  "background": {
+    "file": "upgrade_background.png",
+    "x": 200,
+    "y": 350,
+    "displayWidth": 400,
+    "displayHeight": 700
+  },
+  "title": {
+    "file": "title_upgrades.png",
+    "x": 101,
+    "y": 73,
+    "displayWidth": 168
+  },
+  "headers": {
+    "fabric": {
+      "file": "header_fabric.png",
+      "x": 84,
+      "y": 225,
+      "displayWidth": 152
+    },
+    "steering": {
+      "file": "header_steering.png",
+      "x": 316,
+      "y": 225,
+      "displayWidth": 152
+    }
+  },
+  "upgradeButtons": {
+    "columns": [
+      "fabric",
+      "steering"
+    ],
+    "tiersVisible": 4,
+    "xs": {
+      "fabric": 82,
+      "steering": 318
+    },
+    "ys": [
+      280,
+      345,
+      410,
+      475
+    ],
+    "width": 152,
+    "dynamicNames": true,
+    "dynamicStates": [
+      "completed",
+      "available",
+      "locked"
+    ],
+    "backendTiers": 5
+  },
+  "hero": {
+    "texture": "custom-sock-stages",
+    "frame": 0,
+    "x": 200,
+    "y": 400,
+    "scaleMultiplier": 2.15,
+    "static": true
+  },
+  "back": {
+    "file": "button_washing_room.png",
+    "x": 300,
+    "y": 610,
+    "width": 183,
+    "label": "WASHING ROOM \u2192",
+    "action": "navigate('main')"
+  },
+  "assetRule": "No sock, UI buttons, titles or navigation signs are baked into upgrade_background.png."
+}

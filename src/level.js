@@ -80,6 +80,7 @@ export default class Level extends Phaser.Scene {
         this.collectibleDistance = SPAWNING.firstButtonDistance;
         this.damageTimer = 0;
         this.score = 0;
+        this.currencyAtRunStart = playerData.getProfile().currency;
         this.buttonsCollected = 0;
         this.combo = 0;
         this.testMultiplier = 1;
@@ -141,10 +142,11 @@ export default class Level extends Phaser.Scene {
             heart.fillPoints(points, true);
             return heart;
         });
-        this.add.text(WIDTH - 12, 15, 'SCORE', this.hudStyle(15, '#f3f6ed'))
-            .setOrigin(1, 0).setDepth(11);
-        this.scoreText = this.add.text(WIDTH - 12, 38, '', this.hudStyle(22, '#f3f6ed'))
-            .setOrigin(1, 0).setDepth(11);
+        this.currencyBadge = this.add.image(WIDTH - 76, 35, 'customize-currency-badge')
+            .setDisplaySize(150, 44).setDepth(11);
+        this.currencyText = this.add.text(WIDTH - 55, 35, '', {
+            ...this.hudStyle(14, '#4b3027')
+        }).setOrigin(0.5).setDepth(12);
         this.comboText = this.add.text(WIDTH - 12, 104, '', {
             ...this.hudStyle(MULTIPLIER_STYLE.fontSize, MULTIPLIER_STYLE.yellow),
             stroke: MULTIPLIER_STYLE.outline,
@@ -152,10 +154,14 @@ export default class Level extends Phaser.Scene {
             padding: { left: 4, right: 4, top: 4, bottom: 4 }
         }).setOrigin(1, 1).setDepth(12);
         this.displayedMultiplier = 1;
-        this.weightText = this.add.text(WIDTH / 2, 18, '', this.hudStyle(14, '#8fe0d4'))
-            .setOrigin(0.5, 0).setDepth(11);
-        this.speedText = this.add.text(WIDTH / 2, 49, '', this.hudStyle(14, '#8fe0d4'))
-            .setOrigin(0.5, 0).setDepth(11);
+        this.weightIcon = this.add.image(145, 26, 'hud-weight-icon')
+            .setDisplaySize(25, 24).setDepth(11);
+        this.weightText = this.add.text(164, 18, '', this.hudStyle(14, '#8fe0d4'))
+            .setOrigin(0, 0).setDepth(11);
+        this.speedIcon = this.add.image(145, 61, 'hud-speed-icon')
+            .setDisplaySize(25, 22).setDepth(11);
+        this.speedText = this.add.text(164, 53, '', this.hudStyle(14, '#8fe0d4'))
+            .setOrigin(0, 0).setDepth(11);
         this.updateHud();
     }
 
@@ -169,11 +175,11 @@ export default class Level extends Phaser.Scene {
     }
 
     updateHud() {
-        this.scoreText.setText(`${this.score}`);
+        this.currencyText.setText((this.currencyAtRunStart + this.score).toLocaleString('en-US'));
         const multiplier = this.getActiveMultiplier();
         this.updateMultiplier(multiplier);
-        this.weightText.setText(`WEIGHT  ${this.weight.toFixed(1)} KG`);
-        this.speedText.setText(`SPEED  ${getSpeedKmh(this.buttonsCollected).toFixed(1)} KM/H`);
+        this.weightText.setText(`${this.weight.toFixed(1)} KG`);
+        this.speedText.setText(`${getSpeedKmh(this.buttonsCollected).toFixed(1)} KM/H`);
         this.hearts.forEach((heart, index) => {
             heart.setAlpha(index < this.health ? 1 : 0.2);
         });

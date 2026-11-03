@@ -68,3 +68,20 @@ test('Steering improves heavy response while retaining weight and zero-weight ha
         previous = improved.velocity;
     }
 });
+
+
+test('explicit tier purchases cannot skip levels or rebuy owned tiers; tracks advance independently', () => {
+    const { open } = fixture();
+    const p = open();
+    p.completeRun(p.beginRun(), 6000);
+    assert.equal(p.purchaseUpgrade('fabric', 3), false);
+    assert.equal(p.getProfile().currency, 6000);
+    assert.equal(p.purchaseUpgrade('fabric', 1), true);
+    assert.equal(p.purchaseUpgrade('fabric', 1), false);
+    assert.equal(p.purchaseUpgrade('fabric', 3), false);
+    assert.equal(p.purchaseUpgrade('steering', 1), true);
+    assert.equal(p.purchaseUpgrade('fabric', 2), true);
+    const saved = open().load();
+    assert.deepEqual(saved.upgrades, { fabric: 2, steering: 1 });
+    assert.equal(saved.currency, 3000);
+});

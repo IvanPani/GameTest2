@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { MENU_ART } from './menu-art.js';
+import { MENU_ART, CUSTOMIZE_ART, UPGRADE_ART, RECORD_ART } from './menu-art.js';
 import { playerData } from './player-data.js';
+import { createHudIcons } from './record-note.js';
 import { applySockStyle, CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
 import { getFrameMask } from './silhouette-collision.js';
 
@@ -12,7 +13,7 @@ export default class Boot extends Phaser.Scene {
     }
 
     preload() {
-        for (const [key, url] of MENU_ART) this.load.image(key, url);
+        for (const [key, url] of [...MENU_ART, ...CUSTOMIZE_ART, ...UPGRADE_ART, ...RECORD_ART]) this.load.image(key, url);
         this.load.image('button', new URL('../assets/sprites/button.png', import.meta.url).href);
         this.load.image('soap', new URL('../assets/sprites/soap.png', import.meta.url).href);
         this.load.image(
@@ -52,6 +53,7 @@ export default class Boot extends Phaser.Scene {
         // Precompute their collision silhouettes after creating the custom texture.
         for (const name of ['small', 'medium', 'large']) getFrameMask(soap.get(name));
         getFrameMask(this.textures.getFrame('button'));
+        createHudIcons(this);
         playerData.load();
         applySockStyle(this, playerData.getProfile().sockStyle);
         const customStages = this.textures.get(CUSTOM_SOCK_TEXTURE);

@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Upgrade shop test</title>
-<style>body{margin:0;background:#182b3d;color:white;font:14px sans-serif}#status{white-space:pre-wrap}#juego{width:400px;height:700px}</style>
+<style>body{margin:0;background:#182b3d;color:white;font:14px sans-serif}#status{white-space:pre-wrap}#juego{width:min(100vw,400px);height:calc(100vh - 130px)}</style>
 <button id="finish">Complete test run</button><pre id="status">Loading isolated shop fixture…</pre><div id="juego"></div>
 <script type="module">
 import Phaser from 'phaser';
@@ -9,10 +9,10 @@ import Level from '../src/level.js';
 import End from '../src/end.js';
 import { playerData, defaultProfile } from '../src/player-data.js';
 // Browser-only test fixture: isolated session storage, never the real player save.
-const key = 'falling-socks-upgrade-shop-test';
+const key = 'falling-socks-upgrade-shop-art-test';
 if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify({ ...defaultProfile(), currency: 2000 }));
 playerData.getStorage = () => ({ getItem: () => sessionStorage.getItem(key), setItem: (_, value) => sessionStorage.setItem(key, value) });
-const game = new Phaser.Game({ type:Phaser.AUTO, width:400, height:700, parent:'juego', scene:[Boot,Menu,Level,End], audio:{noAudio:true} });
+const game = new Phaser.Game({ type:Phaser.AUTO, width:400, height:700, parent:'juego', scale:{mode:Phaser.Scale.FIT}, scene:[Boot,Menu,Level,End], audio:{noAudio:true} });
 document.querySelector('#finish').onclick = () => {
     if (!game.scene.isActive('level')) return;
     const level = game.scene.getScene('level');

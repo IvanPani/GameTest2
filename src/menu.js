@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { createRecordNotes } from './record-note.js';
 import { playerData } from './player-data.js';
 import { UPGRADES, getRunStats } from './upgrades.js';
 import { getUpgradeProgress } from './upgrade-progress.js';
@@ -34,10 +35,11 @@ export default class Menu extends Phaser.Scene {
         this.createUpgrades();
         this.createRecords();
 
-        this.add.rectangle(287, 27, 210, 38, 0x102131, 0.88).setScrollFactor(0).setDepth(10);
-        this.currencyText = this.add.text(384, 16, `CURRENCY  ${playerData.getProfile().currency}`, {
-            ...TEXT, fontSize: '18px'
-        }).setOrigin(1, 0).setScrollFactor(0).setDepth(11);
+        this.currencyBadge = this.add.image(324, 35, 'customize-currency-badge')
+            .setDisplaySize(150, 44).setScrollFactor(0).setDepth(20);
+        this.currencyText = this.add.text(345, 35, '', {
+            ...TEXT, fontSize: '14px', color: '#4b3027'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(21);
         this.saveWarning = this.add.text(200, 675, playerData.saveError || '', {
             ...TEXT, fontSize: '16px', color: '#ffcf70', align: 'center', wordWrap: { width: 350 }
         }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
@@ -128,18 +130,55 @@ export default class Menu extends Phaser.Scene {
         return button;
     }
 
+    // Build complete panels: the supplied side-sign PNGs end mid-border/text.
+    createWholeMenuSign(sourceKey, title, arrow) {
+        const key = `${sourceKey}-whole`;
+        if (this.textures.exists(key)) return;
+        const texture = this.textures.createCanvas(key, 180, 140);
+        const ctx = texture.context;
+        const fill = ctx.createLinearGradient(0, 0, 180, 140);
+        fill.addColorStop(0, '#ffe3b6');
+        fill.addColorStop(1, '#efae78');
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = '#6e432b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(3, 3, 174, 134, 9);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = '#fff0ce';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(8, 8, 164, 124);
+        const source = this.textures.get(sourceKey).getSourceImage();
+        ctx.drawImage(source, sourceKey === 'menu-upgrades' ? 65 : 60, 5, 42, 39, 69, 12, 42, 39);
+        ctx.fillStyle = '#302219';
+        ctx.font = 'bold 25px Fredoka, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(title, 90, 75, 158);
+        ctx.font = 'bold 48px sans-serif';
+        ctx.fillText(arrow, 90, 111);
+        for (const x of [14, 166]) {
+            for (const y of [16, 124]) {
+                ctx.fillStyle = '#b5a394';
+                ctx.strokeStyle = '#614d3e';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+        }
+        texture.refresh();
+    }
+
     createMain() {
         const panel = this.add.container(0, 0);
         this.mainPanel = panel;
         panel.setDepth(2);
         this.add.image(200, 350, 'menu-background').setDisplaySize(WIDTH, HEIGHT).setDepth(-1);
         // The same saved sock as Customize and Player, standing behind the basket rim.
-        this.mainSock = this.sock(null, 282, 194, 1.5).setDepth(1);
-        // Crop at the basket rim in source-frame coordinates. Image cropping
-        // works in both Phaser 4 renderers, unlike the legacy geometry mask.
-        const frame = this.mainSock.frame;
-        const cropY = Math.ceil(this.mainSock.originY * frame.height - (246 - this.mainSock.y) / this.mainSock.scaleY);
-        this.mainSock.setCrop(0, cropY, frame.width, frame.height - cropY);
+        this.mainSock = this.sock(null, 200, 230, 1.5).setDepth(1);
         const rim = this.add.image(210, 259, 'menu-basket-rim');
         rim.setScale(225 / rim.width).setCrop(0, 18, rim.width, 20);
         panel.add(rim);
@@ -151,20 +190,30 @@ export default class Menu extends Phaser.Scene {
             ...TEXT, fontSize: '15px', color: '#fff0c8', stroke: '#45372b', strokeThickness: 3
         }).setOrigin(0.5));
         this.artButton(panel, 200, 158, 'menu-customize', 222, () => this.navigate('customize'));
-        this.artButton(panel, 47, 312, 'menu-upgrades', 89, () => this.navigate('upgrades'));
-        this.artButton(panel, 352, 312, 'menu-records', 89, () => this.navigate('records'));
+        this.createWholeMenuSign('menu-upgrades', 'UPGRADES', '←');
+        this.createWholeMenuSign('menu-records', 'RECORDS', '→');
+        this.artButton(panel, 58, 312, 'menu-upgrades-whole', 100, () => this.navigate('upgrades'));
+        this.artButton(panel, 342, 312, 'menu-records-whole', 100, () => this.navigate('records'));
         this.artButton(panel, 200, 501, 'menu-play', 159, () => this.startRun());
         panel.add(this.add.rectangle(200, 647, 354, 29, 0x102131, 0.82));
         this.nextUpgradeGoal = this.label(panel, 200, 647, '', 14, '#ffcf70');
     }
 
     createCustomize() {
-        const panel = this.room('customize', 0x253e4a, 'CUSTOMIZE', 'The clothesline');
-        panel.add(this.add.rectangle(200, 225, 344, 4, 0xb8c7d2));
-        this.customizeSock = this.sock(panel, 192, 235, 1.85);
-        panel.add(this.add.rectangle(192, 228, 10, 26, 0xccaa78));
+        const panel = this.add.container(0, LOCATIONS.customize.y);
+        panel.add(this.add.image(200, 350, 'customize-background').setDisplaySize(WIDTH, HEIGHT));
+        const image = (x, y, key, width) => {
+            const item = this.add.image(x, y, key).setScale(width / this.textures.get(key).getSourceImage().width);
+            panel.add(item);
+            return item;
+        };
+        image(200, 91, 'customize-title', 270);
+        image(200, 171, 'customize-clothespin', 24);
+        this.customizeSock = this.sock(panel, 200, 210, 1.6);
         this.createSkinControls(panel);
-        this.button(panel, 'customize', 200, 645, 'MAIN MENU  /  DOWN', () => this.navigate('main'), 280);
+        const back = image(200, 666, 'customize-back', 220).setInteractive({ useHandCursor: true });
+        back.on('pointerdown', () => this.navigate('main'));
+        this.controls.push({ room: 'customize', button: back });
     }
 
     createSkinControls(panel) {
@@ -181,42 +230,78 @@ export default class Menu extends Phaser.Scene {
             if (!playerData.selectStyle(partial)) return;
             applySockStyle(this, playerData.getProfile().sockStyle);
             this.updateSkinSelection();
+            this.saveWarning?.setText(playerData.saveError || '');
         };
-        const smallButton = (x, y, text, action, width = 42) => {
-            const button = register(this.add.text(x, y, text, {
-                ...TEXT, fontSize: '16px', backgroundColor: '#35566c', align: 'center',
-                fixedWidth: width, padding: { x: 4, y: 8 }
-            }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
+        const addButtonImage = (x, y, key, width, action) => {
+            const button = this.add.image(x, y, key)
+                .setScale(width / this.textures.get(key).getSourceImage().width)
+                .setInteractive({ useHandCursor: true });
+            register(button);
             button.on('pointerdown', action);
             return button;
         };
-        for (const [property, title, x] of [['toesEnabled', 'TOES', 108], ['cuffEnabled', 'CUFF BAND', 290]]) {
-            const button = smallButton(x, 361, '', () => choose({ [property]: !playerData.getProfile().sockStyle[property] }), 160);
-            this.skinToggleButtons.push({ property, title, button });
+        for (const [property, title, x] of [['toesEnabled', 'TOES', 112], ['cuffEnabled', 'CUFF', 288]]) {
+            const button = addButtonImage(x, 340, 'customize-toggle-inactive', 154,
+                () => choose({ [property]: !playerData.getProfile().sockStyle[property] }));
+            const label = this.add.text(x + 17, 350, '', {
+                ...TEXT, fontSize: '13px', color: '#4b3027', align: 'center'
+            }).setOrigin(0.5);
+            panel.add(label);
+            this.skinToggleButtons.push({ property, title, button, label });
         }
-        for (const [title, property, y] of [['SOCK', 'bodyColor', 405], ['TOES / BAND', 'accentColor', 449], ['PATTERN', 'patternColor', 493]]) {
-            this.label(panel, 60, y, title, title === 'TOES / BAND' ? 11 : 14);
+        const colorRows = [
+            ['bodyColor', 'customize-label-sock', 391],
+            ['accentColor', 'customize-label-toes-band', 433],
+            ['patternColor', 'customize-label-pattern', 475]
+        ];
+        for (const [property, labelKey, y] of colorRows) {
+            const label = this.add.image(76, y, labelKey)
+                .setScale(110 / this.textures.get(labelKey).getSourceImage().width);
+            panel.add(label);
             const cycle = direction => {
-                const current = playerData.getProfile().sockStyle[property];
-                const index = SOCK_COLORS.findIndex(color => color.hex === current);
-                const next = index < 0 ? (direction > 0 ? 0 : SOCK_COLORS.length - 1)
-                    : (index + direction + SOCK_COLORS.length) % SOCK_COLORS.length;
-                choose({ [property]: SOCK_COLORS[next].hex });
+                const profile = playerData.getProfile();
+                const colors = profile.unlocks.colors;
+                const index = colors.indexOf(profile.sockStyle[property]);
+                const next = index < 0 ? (direction > 0 ? 0 : colors.length - 1)
+                    : (index + direction + colors.length) % colors.length;
+                choose({ [property]: colors[next] });
             };
-            smallButton(132, y, '<', () => cycle(-1));
-            const swatch = this.add.rectangle(177, y, 24, 24, 0xffffff).setStrokeStyle(1, 0xb8c7d2);
+            addButtonImage(196, y, 'customize-arrow-left', 35, () => cycle(-1));
+            const valueBackground = this.add.image(270, y, 'customize-selector')
+                .setScale(104 / this.textures.get('customize-selector').getSourceImage().width);
+            panel.add(valueBackground);
+            const swatch = this.add.rectangle(233, y, 17, 17, 0xffffff);
             panel.add(swatch);
-            const name = this.label(panel, 252, y, '', 14);
-            smallButton(348, y, '>', () => cycle(1));
+            const swatchFrame = this.add.image(233, y, 'customize-swatch-frame')
+                .setScale(31 / this.textures.get('customize-swatch-frame').getSourceImage().width);
+            panel.add(swatchFrame);
+            const name = this.add.text(286, y, '', {
+                ...TEXT, fontSize: '10px', color: '#4b3027', align: 'center'
+            }).setOrigin(0.5);
+            panel.add(name);
+            addButtonImage(344, y, 'customize-arrow-right', 35, () => cycle(1));
             this.skinColorControls.push({ property, swatch, name });
         }
         for (const [index, pattern] of SOCK_PATTERNS.entries()) {
-            const x = 74 + (index % 4) * 84;
-            const y = 541 + Math.floor(index / 4) * 39;
-            const button = smallButton(x, y, pattern.name, () => choose({ patternId: pattern.id }), 78).setFontSize(12);
-            this.skinPatternButtons.push({ button, id: pattern.id });
+            const x = 50 + (index % 4) * 100;
+            const y = 545 + Math.floor(index / 4) * 36;
+            const key = `customize-pattern-${pattern.id === 'plain' ? 'none' : pattern.id === 'crescents' ? 'moons' : pattern.id}`;
+            const background = this.add.image(x, y, 'customize-pattern-default')
+                .setScale(88 / this.textures.get('customize-pattern-default').getSourceImage().width);
+            const button = this.add.image(x, y, key)
+                .setScale(84 / this.textures.get(key).getSourceImage().width)
+                .setInteractive({ useHandCursor: true });
+            register(button);
+            panel.add(background);
+            button.on('pointerdown', () => choose({ patternId: pattern.id }));
+            this.skinPatternButtons.push({ background, id: pattern.id });
         }
-        this.label(panel, 200, 611, 'LIVE PREVIEW  /  SAVES AUTOMATICALLY', 10, '#8fe0d4');
+        const patternHeader = this.add.text(200, 511, 'CHOOSE A PATTERN', {
+            ...TEXT, fontSize: '12px', color: '#fff0c8', stroke: '#45372b', strokeThickness: 3
+        }).setOrigin(0.5);
+        panel.add(patternHeader);
+        const preview = this.add.image(200, 617, 'customize-preview').setDisplaySize(260, 26);
+        panel.add(preview);
         this.updateSkinSelection();
     }
 
@@ -224,108 +309,159 @@ export default class Menu extends Phaser.Scene {
         const style = playerData.getProfile().sockStyle;
         for (const { property, swatch, name } of this.skinColorControls || []) {
             swatch.setFillStyle(Phaser.Display.Color.HexStringToColor(style[property]).color);
-            name.setText(SOCK_COLORS.find(color => color.hex === style[property])?.name || 'Saved color');
+            name.setText(SOCK_COLORS.find(color => color.hex === style[property])?.name || style[property].toUpperCase());
         }
-        for (const { property, title, button } of this.skinToggleButtons || []) {
-            button.setText(`${title}: ${style[property] ? 'ON' : 'OFF'}`);
-            button.setBackgroundColor(style[property] ? '#527a86' : '#35566c');
+        for (const { property, title, button, label } of this.skinToggleButtons || []) {
+            const active = style[property];
+            button.setTexture(active ? 'customize-toggle-active' : 'customize-toggle-inactive');
+            label.setText(`${title}: ${active ? 'ON' : 'OFF'}`);
         }
-        for (const { button, id } of this.skinPatternButtons || []) {
-            button.setBackgroundColor(style.patternId === id ? '#709aaa' : '#35566c');
+        for (const { background, id } of this.skinPatternButtons || []) {
+            const selected = style.patternId === id;
+            background.setTexture(selected ? 'customize-pattern-selected' : 'customize-pattern-default');
+            background.setAlpha(selected ? 0.32 : 0);
         }
     }
 
     createUpgrades() {
-        const panel = this.room('upgrades', 0x3b3544, 'UPGRADES', 'The sewing table');
-        // Keep a small sewing-table marker above the two functional shop cards.
-        panel.add(this.add.rectangle(200, 205, 240, 10, 0x997f71));
-        panel.add(this.add.rectangle(177, 183, 65, 35, 0x8ca6b5));
-        panel.add(this.add.rectangle(195, 190, 20, 20, 0x3b3544));
-        panel.add(this.add.rectangle(250, 190, 18, 22, 0xcc655a));
-        this.upgradeCards = {};
-        for (const [id, title, top] of [['fabric', 'FABRIC', 245], ['steering', 'STEERING', 395]]) {
-            panel.add(this.add.rectangle(200, top + 53, 344, 140, 0x292735).setStrokeStyle(1, 0x709aaa));
-            this.label(panel, 200, top, title, 22);
-            const description = this.label(panel, 200, top + 28, '', 16, '#8fe0d4');
-            const owned = this.label(panel, 200, top + 51, '', 14, '#b8c7d2');
-            const buy = this.button(panel, 'upgrades', 200, top + 88, '', () => this.buyUpgrade(id), 290);
-            this.upgradeCards[id] = { description, owned, buy };
+        const panel = this.add.container(LOCATIONS.upgrades.x, LOCATIONS.upgrades.y);
+        const art = (x, y, key, width) => {
+            const image = this.add.image(x, y, key);
+            image.setScale(width / image.width);
+            panel.add(image);
+            return image;
+        };
+        panel.add(this.add.image(200, 350, 'upgrade-background').setDisplaySize(WIDTH, HEIGHT));
+        art(101, 73, 'upgrade-title', 168);
+        this.label(panel, 101, 73, 'UPGRADES', 24, '#392e24');
+        art(84, 225, 'upgrade-fabric', 152);
+        this.label(panel, 84, 225, 'FABRIC', 22, '#392e24');
+        art(316, 225, 'upgrade-steering', 152);
+        this.label(panel, 316, 225, 'STEERING', 22, '#392e24');
+        // Static shared skin in the clear space between the two upgrade chains.
+        this.upgradeSock = this.sock(panel, 200, 400, 1.75).setOrigin(0.5);
+        const names = {
+            fabric: ['Reinforced\nStitching', 'Double\nLayer', 'Tough\nFabric', 'Master\nWeave', 'Unbreakable\nThread'],
+            steering: ['Better\nHandling', 'Sharper\nTurns', 'Total\nControl', 'Precision\nSteering', 'Silky\nSteering']
+        };
+        this.upgradeTiers = [];
+        for (const id of ['fabric', 'steering']) {
+            const x = id === 'fabric' ? 82 : 318;
+            for (let tier = 1; tier <= UPGRADES[id].costs.length; tier++) {
+                const y = 278 + (tier - 1) * 60;
+                const button = art(x, y, `upgrade-${id}-${tier}`, 152)
+                    .setInteractive({ useHandCursor: true });
+                this.controls.push({ room: 'upgrades', button });
+                button.on('pointerdown', () => this.buyUpgrade(id, tier));
+                const name = this.label(panel, x + 16, y - 8, names[id][tier - 1].toUpperCase(), 15, '#392e24').setLineSpacing(-2);
+                if (name.width > 100) name.setFontSize(Math.floor(15 * 100 / name.width));
+                const status = this.label(panel, x + 10, y + 16, '', 12, '#665543');
+                const check = this.add.graphics({ x: x + 62, y: y + 16 });
+                check.fillStyle(0x258a48).fillCircle(0, 0, 6);
+                check.lineStyle(2, 0xffffff).beginPath().moveTo(-3, 0).lineTo(-1, 2).lineTo(3, -3).strokePath();
+                panel.add(check);
+                // A small drawn padlock stays legible even when fonts lack lock glyphs.
+                const lock = this.add.graphics({ x: x + 61, y: y + 15 });
+                lock.lineStyle(2, 0x666b70).strokeRoundedRect(-3, -7, 6, 8, 3);
+                lock.fillStyle(0x666b70).fillRoundedRect(-5, -3, 10, 8, 2);
+                panel.add(lock);
+                const highlight = this.add.rectangle(x, y - 2, 148, 51).setFillStyle(0, 0).setStrokeStyle(2, 0xf2c764);
+                panel.add(highlight);
+                this.upgradeTiers.push({ id, tier, button, name, status, check, lock, highlight });
+            }
         }
-        this.shopMessage = this.label(panel, 200, 538, 'Bonuses apply to your next run', 14, '#ffcf70');
-        this.button(panel, 'upgrades', 200, 589, 'MAIN MENU  /  RIGHT', () => this.navigate('main'));
+        panel.add(this.add.rectangle(200, 567, 366, 28, 0x102131, 0.8));
+        const stats = getRunStats(playerData.getProfile().upgrades);
+        this.shopMessage = this.label(panel, 200, 567, `${stats.maxHealth} HEARTS • ${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% LESS WEIGHT DELAY`, 14, '#ffcf70');
+        const back = art(300, 610, 'upgrade-back', 183).setInteractive({ useHandCursor: true });
+        this.label(panel, 300, 610, 'WASHING ROOM  >', 17, '#392e24');
+        back.on('pointerdown', () => this.navigate('main'));
+        this.controls.push({ room: 'upgrades', button: back });
     }
 
     updateShop() {
         const profile = playerData.getProfile();
-        const stats = getRunStats(profile.upgrades);
-        this.currencyText?.setText(`CURRENCY  ${profile.currency}`);
+        this.currencyText?.setText(profile.currency.toLocaleString('en-US'));
+        this.saveWarning?.setY(this.location === 'customize' ? 323 : 675);
         this.nextUpgradeGoal.setText(getUpgradeProgress(profile).message);
         this.saveWarning?.setText(playerData.saveError || '');
-        for (const [id, card] of Object.entries(this.upgradeCards)) {
-            const level = profile.upgrades[id];
-            const max = UPGRADES[id].costs.length;
-            const price = UPGRADES[id].costs[level];
-            const capped = level >= max;
-            card.description.setText(id === 'fabric'
-                ? `${stats.maxHealth} hearts${capped ? '' : `  →  ${stats.maxHealth + 1} hearts`}`
-                : `${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% less weight delay${capped ? '' : `  →  ${Math.round((1 - 1 / (1 + 0.25 * (level + 1))) * 100)}%`}`);
-            card.owned.setText(`LEVEL ${level} / ${max}`);
-            card.buy.setText(capped ? 'MAX LEVEL' : profile.currency < price ? 'NEED 1,000 CURRENCY' : 'BUY  /  1,000 CURRENCY');
-            card.buy.shopEnabled = !capped && profile.currency >= price;
-            card.buy.setAlpha(card.buy.shopEnabled ? 1 : 0.5);
+        for (const item of this.upgradeTiers) {
+            const level = profile.upgrades[item.id];
+            const owned = item.tier <= level;
+            const next = item.tier === level + 1;
+            const price = UPGRADES[item.id].costs[item.tier - 1];
+            item.button.shopEnabled = next && profile.currency >= price;
+            item.button.setAlpha(owned || next ? 1 : 0.65);
+            item.name.setAlpha(owned || next ? 1 : 0.65);
+            item.check.setVisible(owned);
+            item.lock.setVisible(!owned && !next);
+            item.highlight.setVisible(next);
+            item.status.setText(owned ? 'OWNED' : next ? '1,000' : 'LOCKED');
+            item.status.setColor(owned ? '#258a48' : next && profile.currency < price ? '#9e553d' : '#665543');
         }
         this.refreshControls();
     }
 
-    buyUpgrade(id) {
+    buyUpgrade(id, tier) {
         if (this.location !== 'upgrades' || this.transitioning || this.starting) return;
-        const purchased = playerData.purchaseUpgrade(id);
-        this.shopMessage.setText(purchased ? `${id === 'fabric' ? 'Fabric' : 'Steering'} improved! Applies next run.`
-            : playerData.saveError ? 'Could not save purchase. No currency spent.' : 'Purchase unavailable');
+        const profile = playerData.getProfile();
+        if (tier !== profile.upgrades[id] + 1) return;
+        const purchased = playerData.purchaseUpgrade(id, tier);
+        const stats = getRunStats(playerData.getProfile().upgrades);
+        this.shopMessage.setText((purchased ? id === 'fabric'
+            ? `Fabric improved! Next run: ${stats.maxHealth} hearts.`
+            : `Steering improved! ${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% less weight delay.`
+            : playerData.saveError ? 'Could not save purchase. No currency spent.' : 'You need 1,000 currency for this level.').toUpperCase());
         this.updateShop();
     }
 
     createRecords() {
-        const panel = this.room('records', 0x2c3d36, 'RECORDS', 'Your laundry legends');
-        // Wood-framed corkboard, a pinned paper sheet and subtle cork flecks.
-        panel.add(this.add.rectangle(200, 350, 350, 390, 0x795442));
-        panel.add(this.add.rectangle(200, 350, 328, 368, 0xb68c5a));
-        for (let row = 0; row < 13; row++) {
-            for (let column = 0; column < 14; column++) {
-                panel.add(this.add.rectangle(45 + column * 24 + (row % 2) * 5,
-                    177 + row * 28, 3, 2, (row + column) % 2 ? 0x997044 : 0xcaa575));
-            }
-        }
-        panel.add(this.add.rectangle(204, 359, 296, 350, 0x624b36, 0.35));
-        panel.add(this.add.rectangle(200, 354, 296, 350, 0xf3eddc));
-        this.label(panel, 200, 211, 'PERSONAL BESTS', 22, '#463b32');
-        panel.add(this.add.rectangle(200, 232, 254, 2, 0xcac1aa));
+        const panel = this.add.container(LOCATIONS.records.x, LOCATIONS.records.y);
+        const art = (x, y, key, width) => {
+            const image = this.add.image(x, y, key);
+            image.setScale(width / image.width);
+            panel.add(image);
+            return image;
+        };
+        panel.add(this.add.image(200, 350, 'records-background').setDisplaySize(WIDTH, HEIGHT));
+        art(200, 375, 'records-board', 360);
+        art(200, 375, 'records-paper', 326);
+        // Values line up with the icons, labels and rules printed on the paper.
+        // The paper's original dimensions are 409 x 512.
+        const scale = 326 / 409;
+        const paperTop = 375 - 512 * scale / 2;
         const records = playerData.getProfile().records;
-        const number = value => value.toLocaleString('en-US');
+        const number = value => value >= 1000000
+            ? new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+            : value.toLocaleString('en-US');
         const rows = [
-            ['BEST SCORE', number(records.bestScore)],
-            ['MAX SPEED', `${records.maxSpeedKmh.toFixed(1)} KM/H`],
-            ['MAX WEIGHT', `${records.maxWeight.toFixed(1)} KG`],
-            ['BIGGEST STREAK', `${number(records.maxStreak)} buttons`],
-            ['MOST BUTTONS / RUN', number(records.mostButtons)],
-            ['TOTAL BUTTONS', number(records.totalButtons)],
-            ['CURRENCY EARNED', number(records.totalCurrencyEarned)],
-            ['COMPLETED RUNS', number(records.totalRuns)]
+            [126, number(records.bestScore), 96],
+            [168, `${number(Number(records.maxSpeedKmh.toFixed(1)))} KM/H`, 116],
+            [211, `${number(Number(records.maxWeight.toFixed(1)))} KG`, 116],
+            [252, number(records.maxStreak), 100],
+            [295, number(records.mostButtons), 64],
+            [338, number(records.totalButtons), 100],
+            [382, number(records.totalCurrencyEarned), 90],
+            [426, number(records.totalRuns), 90]
         ];
-        for (const [index, [label, value]] of rows.entries()) {
-            const y = 256 + index * 29;
-            panel.add(this.add.text(69, y, label, { ...TEXT, fontSize: '12px', color: '#665645' }).setOrigin(0, 0.5));
-            // Fit even large lifetime totals without overlapping the row label.
-            const entry = this.add.text(331, y, value, { ...TEXT, fontSize: '16px', color: '#352e28' }).setOrigin(1, 0.5);
-            if (entry.width > 118) entry.setScale(118 / entry.width);
+        for (const [nativeY, value, maxWidth] of rows) {
+            const entry = this.add.text(348, paperTop + nativeY * scale, value, {
+                ...TEXT, fontSize: '20px', color: '#3c202b'
+            }).setOrigin(1, 0.5);
+            if (entry.width > maxWidth) entry.setScale(maxWidth / entry.width);
             panel.add(entry);
-            panel.add(this.add.rectangle(200, y + 14, 262, 1, 0xdcd4c1));
         }
-        this.label(panel, 200, 501, 'Tracking starts with this update', 11, '#80715e');
-        panel.add(this.add.circle(201, 186, 7, 0x614332, 0.3));
-        panel.add(this.add.circle(200, 183, 6, 0xcc655a));
-        panel.add(this.add.circle(198, 181, 2, 0xf3b39a));
-        this.button(panel, 'records', 200, 589, 'MAIN MENU  /  LEFT', () => this.navigate('main'));
+        art(200, 109, 'records-title', 280).setCrop(0, 0, 509, 200);
+        createRecordNotes(this);
+        art(48, 565, 'records-note-sock', 65).setAngle(-7);
+        art(352, 565, 'records-note-star', 65).setAngle(8);
+        // Save-history note stays below the paper, away from the record values.
+        this.label(panel, 200, 594, 'TRACKING STARTS WITH THIS UPDATE', 10, '#fff0c8')
+            .setStroke('#45372b', 2);
+        const back = art(200, 646, 'records-back', 240)
+            .setCrop(0, 0, 466, 157).setInteractive({ useHandCursor: true });
+        back.on('pointerdown', () => this.navigate('main'));
+        this.controls.push({ room: 'records', button: back });
     }
 
     refreshControls() {
@@ -349,6 +485,7 @@ export default class Menu extends Phaser.Scene {
     finishNavigation() {
         this.location = this.destination;
         this.transitioning = false;
+        this.saveWarning.setY(this.location === 'customize' ? 323 : 675);
         for (const { button, scale } of this.artButtons) {
             this.tweens.killTweensOf(button);
             button.setScale(scale);
