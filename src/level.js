@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
+import { createTransitionForeground } from './transition-foreground.js';
 import Player, { SOCK_VISUALS } from './player.js';
 import { pickupSoundKey, playGameSound } from './game-audio.js';
 import { chooseHazard } from './hazards.js';
 import { CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
-import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint, DEV_CHECKPOINTS_ENABLED, getDevShortcut } from './level-regions.js';
+import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint, getBackgroundLayout, getStackOffset, STACK_SEAM_OVERLAP, DEV_CHECKPOINTS_ENABLED, getDevShortcut } from './level-regions.js';
 import { playerData } from './player-data.js';
 import { getRunStats } from './upgrades.js';
 import { COMBO, getComboMultiplier } from './combo.js';
@@ -119,10 +120,32 @@ export default class Level extends Phaser.Scene {
     createShaft() {
         this.runDistance = 0;
         this.regionIndex = -1;
-        this.background = this.add.image(WIDTH / 2, 0, LEVEL_REGIONS[0].key)
-            .setOrigin(0.5, 0).setDepth(-2);
-        this.nextBackground = this.add.image(WIDTH / 2, 0, LEVEL_REGIONS[1].key)
-            .setOrigin(0.5, 0).setDepth(-1).setAlpha(0);
+        this.backgroundLayout = getBackgroundLayout(WIDTH, HEIGHT);
+        this.backgrounds = LEVEL_REGIONS.map((region, index) => {
+            const section = this.backgroundLayout.sections[index];
+            let key = region.key;
+            if (index > 0) {
+                key = `${region.key}-stacked`;
+                if (!this.textures.exists(key)) {
+                    const source = this.textures.get(region.key).getSourceImage();
+                    const texture = this.textures.createCanvas(key, source.width, source.height);
+                    const ctx = texture.context;
+                    ctx.drawImage(source, 0, 0);
+                    // Only soften the touching edges; the full illustrations never crossfade.
+                    ctx.globalCompositeOperation = 'destination-in';
+                    const edge = ctx.createLinearGradient(0, 0, 0, STACK_SEAM_OVERLAP / section.height * source.height);
+                    edge.addColorStop(0, 'rgba(255,255,255,0)');
+                    edge.addColorStop(1, 'rgba(255,255,255,1)');
+                    ctx.fillStyle = edge;
+                    ctx.fillRect(0, 0, source.width, source.height);
+                    texture.refresh();
+                }
+            }
+            return this.add.image(WIDTH / 2, section.top, key).setOrigin(0.5, 0)
+                .setDisplaySize(WIDTH, section.height + 1).setDepth(-2);
+        });
+        this.transitionForegrounds = this.backgroundLayout.sections.slice(1).map((section, index) =>
+            createTransitionForeground(this, index, section.top + STACK_SEAM_OVERLAP / 2));
         // The waiting partner shares the exact saved colors, accents and pattern.
         // A static first frame keeps it resting rather than falling/animating.
         this.partnerShadow = this.add.ellipse(200, 0, 48, 10, 0x100b23, 0.45).setDepth(0).setVisible(false);
@@ -131,28 +154,25 @@ export default class Level extends Phaser.Scene {
         this.renderRegion();
     }
 
-    fitBackground(image, key) {
-        image.setTexture(key);
-        const texture = image.texture.getSourceImage();
-        image.setScale(Math.max(WIDTH / texture.width, HEIGHT / texture.height));
-    }
-
     renderRegion() {
-        const state = getRegionProgress(this.runDistance);
-        if (state.index !== this.regionIndex) {
-            this.regionIndex = state.index;
-            this.fitBackground(this.background, LEVEL_REGIONS[state.index].key);
-            this.fitBackground(this.nextBackground, LEVEL_REGIONS[Math.min(state.index + 1, LEVEL_REGIONS.length - 1)].key);
+        const state = getRegionProgress(this.runDistance, this.backgroundLayout);
+        this.regionIndex = state.index;
+        this.backgroundMaxOffset = this.backgroundLayout.maxOffset;
+        this.backgroundOffset = getStackOffset(this.runDistance, this.backgroundLayout);
+        this.backgrounds.forEach((image, index) => {
+            image.y = this.backgroundLayout.sections[index].top - this.backgroundOffset;
+        });
+        for (const { worldY, veil, rim } of this.transitionForegrounds) {
+            const y = worldY - this.backgroundOffset;
+            veil.setY(y).setVisible(y > -120 && y < HEIGHT + 120);
+            rim.setY(y).setVisible(y > -120 && y < HEIGHT + 120);
         }
-        this.backgroundMaxOffset = Math.max(0, this.background.displayHeight - HEIGHT);
-        this.backgroundOffset = this.backgroundMaxOffset * state.progress;
-        this.background.y = -this.backgroundOffset;
-        this.nextBackground.y = 0;
-        this.nextBackground.setAlpha(state.blend);
-        const inPit = state.index === LEVEL_REGIONS.length - 1;
-        const floorY = this.background.displayHeight - 75 - this.backgroundOffset;
-        this.partnerSock.setVisible(inPit).setY(floorY - 10);
-        this.partnerShadow.setVisible(inPit).setY(floorY + 7);
+        this.background = this.backgrounds[state.index];
+        this.nextBackground = this.backgrounds[Math.min(state.index + 1, LEVEL_REGIONS.length - 1)];
+        const pit = this.backgroundLayout.sections.at(-1);
+        const floorY = pit.top + pit.height - 75 - this.backgroundOffset;
+        this.partnerSock.setVisible(floorY < HEIGHT + 50).setY(floorY - 10);
+        this.partnerShadow.setVisible(floorY < HEIGHT + 50).setY(floorY + 7);
     }
 
     installRegionShortcuts() {

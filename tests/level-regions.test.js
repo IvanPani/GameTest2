@@ -1,40 +1,47 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { LEVEL_REGIONS, REGION_DISTANCE, getRegionProgress, getDevCheckpoint, getDevShortcut, DEV_CHECKPOINTS_ENABLED } from '../src/level-regions.js';
+import { LEVEL_REGIONS, REGION_DISTANCE, getRegionProgress, getDevCheckpoint, getBackgroundLayout, getStackOffset, STACK_SEAM_OVERLAP, getDevShortcut, DEV_CHECKPOINTS_ENABLED } from '../src/level-regions.js';
 
 test('all four backgrounds exist in the requested travel order', () => {
     assert.deepEqual(LEVEL_REGIONS.map(region => region.name), ['PIPES', 'RUSTED PIPES', 'SEWER', 'PIT OF LOST THINGS']);
     for (const region of LEVEL_REGIONS) assert.ok(existsSync(new URL(region.url)), region.url);
 });
 
-test('distance advances through each region and holds at the end of the pit', () => {
-    for (let index = 0; index < LEVEL_REGIONS.length; index++) {
-        assert.deepEqual(getRegionProgress(index * REGION_DISTANCE), { index, progress: 0, blend: 0 });
-        assert.equal(getRegionProgress((index + 0.5) * REGION_DISTANCE).progress, 0.5);
+test('stacked illustrations overlap only at their touching edges and reach the Pit floor at the same total distance', () => {
+    const layout = getBackgroundLayout();
+    assert.equal(layout.sections[0].top, 0);
+    for (let i = 1; i < layout.sections.length; i++) {
+        assert.equal(layout.sections[i].top, layout.sections[i - 1].top + layout.sections[i - 1].height - STACK_SEAM_OVERLAP);
     }
-    assert.deepEqual(getRegionProgress(1e9), { index: 3, progress: 1, blend: 0 });
-    assert.deepEqual(getRegionProgress(-100), getRegionProgress(0));
+    assert.equal(getStackOffset(0), 0);
+    assert.equal(getStackOffset(LEVEL_REGIONS.length * REGION_DISTANCE), layout.maxOffset);
+    assert.equal(getStackOffset(1e9), layout.maxOffset);
+    assert.deepEqual(getRegionProgress(1e9), {index:3, progress:1});
+    assert.deepEqual(getRegionProgress(-1), {index:0, progress:0});
 });
 
-test('area transitions blend into the next beginning then reset cleanly at the boundary', () => {
-    assert.equal(getRegionProgress(REGION_DISTANCE - 300).blend, 0.5);
-    assert.equal(getRegionProgress(REGION_DISTANCE).index, 1);
-    assert.equal(getRegionProgress(REGION_DISTANCE).progress, 0);
-    assert.equal(getRegionProgress(4 * REGION_DISTANCE + 5900).blend, 0);
+test('scrolling stays continuous across boundaries with both backgrounds fully opaque', () => {
+    const layout = getBackgroundLayout();
+    for (let i = 1; i < layout.sections.length; i++) {
+        const distance = layout.sections[i].top / layout.maxOffset * LEVEL_REGIONS.length * REGION_DISTANCE;
+        assert.ok(Math.abs(getStackOffset(distance) - layout.sections[i].top) < 1e-9);
+        assert.ok(getStackOffset(distance + 1) - getStackOffset(distance - 1) < 1);
+    }
 });
 
-test('eight development checkpoints bracket all four areas with transition lead-in', () => {
-    for (let index = 0; index < 4; index++) {
+test('eight checkpoints follow the actual stacked artwork, with a lead-in before each seam', () => {
+    const layout = getBackgroundLayout();
+    for (let index = 0; index < LEVEL_REGIONS.length; index++) {
         const start = getDevCheckpoint(index * 2 + 1);
         const end = getDevCheckpoint(index * 2 + 2);
-        assert.deepEqual(start, { index, distance: index * REGION_DISTANCE });
-        assert.equal(getRegionProgress(end.distance).index, index);
+        assert.equal(start.index, index);
+        assert.equal(getRegionProgress(start.distance).index, index);
+        assert.ok(Math.abs(getStackOffset(start.distance) - layout.sections[index].top) < 1e-9);
         assert.ok(end.distance > start.distance);
-        assert.equal(getRegionProgress(end.distance).blend, 0);
-        assert.ok(end.distance < (index + 1) * REGION_DISTANCE);
+        if (index < 3) assert.ok(layout.sections[index + 1].top - getStackOffset(end.distance) > 700);
     }
-    for (const invalid of [0, 10, 1.5, NaN]) assert.equal(getDevCheckpoint(invalid), null);
+    for (const invalid of [0,10,1.5,NaN]) assert.equal(getDevCheckpoint(invalid),null);
 });
 
 test('key nine places the sock just before the reunion trigger', () => {

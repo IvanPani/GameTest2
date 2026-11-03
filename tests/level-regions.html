@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Four-area development test</title>
 <style>body{margin:0;background:#182b3d;color:white;font:12px sans-serif}#status{white-space:pre-wrap;margin:6px}#juego{width:min(100vw,400px);height:calc(100vh - 110px)}</style>
-<button id="flow">Check automatic progression</button><pre id="status">Loading isolated test…</pre><div id="juego"></div>
+<button id="flow">Check automatic progression</button><button id="seam">Next stacked seam</button><pre id="status">Loading isolated test…</pre><div id="juego"></div>
 <script type="module">
 import Phaser from 'phaser';
 import Boot from '../src/boot.js';
@@ -8,7 +8,7 @@ import Menu from '../src/menu.js';
 import Level from '../src/level.js';
 import End from '../src/end.js';
 import { playerData, defaultProfile } from '../src/player-data.js';
-import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getDevCheckpoint } from '../src/level-regions.js';
+import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getDevCheckpoint, getBackgroundLayout, STACK_SEAM_OVERLAP } from '../src/level-regions.js';
 const testProfile = defaultProfile();
 testProfile.sockStyle = { ...testProfile.sockStyle, bodyColor: '#182c60', accentColor: '#ed81b1', patternColor: '#f3cf4b', patternId: 'stars' };
 let saved = JSON.stringify(testProfile);
@@ -39,12 +39,28 @@ document.querySelector('#flow').onclick = () => {
     level.runDistance = 0;
     level.renderRegion();
     reached.push(level.regionIndex);
-    for (let i=1; i<4; i++) {level.scrollShaft(REGION_DISTANCE / BACKGROUND_SPEED_MULTIPLIER); reached.push(level.regionIndex);}
+    for (let i=1; i<4; i++) {level.jumpToCheckpoint(i * 2 + 1); reached.push(level.regionIndex);}
     level.scrollShaft(REGION_DISTANCE * 10);
     checks = JSON.stringify(reached) === '[0,1,2,3]' && snapshot(level) === before && level.regionIndex === 3
         && level.backgroundOffset === level.backgroundMaxOffset
         && level.partnerSock.texture.key === level.player.sock.texture.key && !level.partnerSock.anims
         && level.partnerSock.visible ? 'PASS: all four areas advance in order, pit holds; static partner matches player; run/save preserved.' : 'FAIL: flow';
+};
+let seamIndex = 0;
+document.querySelector('#seam').onclick = () => {
+    const level = game.scene.getScene('level');
+    const before = snapshot(level);
+    const layout = getBackgroundLayout();
+    seamIndex = seamIndex % 3 + 1;
+    level.runDistance = (layout.sections[seamIndex].top - 350) / layout.maxOffset * 4 * REGION_DISTANCE;
+    level.renderRegion();
+    level.scene.pause();
+    const above = level.backgrounds[seamIndex - 1], below = level.backgrounds[seamIndex];
+    const gap = below.y - (above.y + above.displayHeight);
+    checks = Math.abs(below.y - 350) < 1e-6 && gap <= -STACK_SEAM_OVERLAP && gap >= -STACK_SEAM_OVERLAP - 1.01
+        && above.alpha === 1 && below.alpha === 1 && snapshot(level) === before
+        ? `PASS: seam ${seamIndex}; stacked edges; only a narrow edge blend; run/save unchanged.` : 'FAIL: seam';
+    document.querySelector('#status').textContent = checks;
 };
 game.events.on('poststep', () => {
     if (!game.scene.isActive('level')) return;
