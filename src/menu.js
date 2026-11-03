@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { createReunionsAlbum } from './reunions-album.js';
 import { createCustomizeIcons } from './customize-icons.js';
 import { createRecordNotes } from './record-note.js';
 import { playerData } from './player-data.js';
@@ -6,7 +7,7 @@ import { UPGRADES, getRunStats } from './upgrades.js';
 import { getUpgradeProgress } from './upgrade-progress.js';
 import { SOCK_VISUALS } from './player.js';
 import { CUSTOM_SOCK_TEXTURE, applySockStyle } from './sock-skin.js';
-import { SOCK_COLORS, SOCK_PATTERNS } from './sock-customization.js';
+import { SOCK_PATTERNS, getSockColorName } from './sock-customization.js';
 
 const WIDTH = 400;
 const HEIGHT = 700;
@@ -313,7 +314,7 @@ export default class Menu extends Phaser.Scene {
         const style = playerData.getProfile().sockStyle;
         for (const { property, swatch, name } of this.skinColorControls || []) {
             swatch.setFillStyle(Phaser.Display.Color.HexStringToColor(style[property]).color);
-            name.setText(SOCK_COLORS.find(color => color.hex === style[property])?.name || style[property].toUpperCase());
+            name.setText(getSockColorName(style[property]));
         }
         for (const { property, title, button, label } of this.skinToggleButtons || []) {
             const active = style[property];
@@ -430,7 +431,9 @@ export default class Menu extends Phaser.Scene {
         };
         panel.add(this.add.image(200, 350, 'records-background').setDisplaySize(WIDTH, HEIGHT));
         art(200, 375, 'records-board', 360);
-        art(200, 375, 'records-paper', 326);
+        const personalSheet=this.add.container(0,0);
+        panel.add(personalSheet);
+        personalSheet.add(art(200, 375, 'records-paper', 326));
         // Values line up with the icons, labels and rules printed on the paper.
         // The paper's original dimensions are 409 x 512.
         const scale = 326 / 409;
@@ -454,14 +457,15 @@ export default class Menu extends Phaser.Scene {
                 ...TEXT, fontSize: '20px', color: '#3c202b'
             }).setOrigin(1, 0.5);
             if (entry.width > maxWidth) entry.setScale(maxWidth / entry.width);
-            panel.add(entry);
+            personalSheet.add(entry);
         }
         art(200, 109, 'records-title', 280).setCrop(0, 0, 509, 200);
         createRecordNotes(this);
         art(48, 565, 'records-note-sock', 65).setAngle(-7);
         art(352, 565, 'records-note-star', 65).setAngle(8);
-        this.label(panel, 200, 559, `TOTAL RUNS: ${number(records.totalRuns)}`, 14, '#fff0c8')
+        this.label(personalSheet, 200, 562, `TOTAL RUNS: ${number(records.totalRuns)}`, 14, '#fff0c8')
             .setStroke('#45372b', 2);
+        this.recordsAlbum=createReunionsAlbum(this,panel,personalSheet);
         // Save-history note stays below the paper, away from the record values.
         this.label(panel, 200, 594, 'TRACKING STARTS WITH THIS UPDATE', 10, '#fff0c8')
             .setStroke('#45372b', 2);
@@ -473,7 +477,7 @@ export default class Menu extends Phaser.Scene {
 
     refreshControls() {
         for (const { room, button } of this.controls) {
-            button.input.enabled = room === this.location && !this.transitioning && !this.starting && button.shopEnabled !== false;
+            button.input.enabled = room === this.location && !this.transitioning && !this.starting && button.shopEnabled !== false && button.pageEnabled !== false;
         }
     }
 

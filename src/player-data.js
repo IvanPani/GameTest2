@@ -1,3 +1,4 @@
+import { snapshotReunionStyle, validateReunions } from './reunions.js';
 import { UPGRADES } from './upgrades.js';
 import { SOCK_COLORS, SOCK_PATTERNS } from './sock-customization.js';
 import { defaultRecords, validateRecords, recordCompletedRun } from './records.js';
@@ -14,6 +15,8 @@ export function defaultProfile() {
         currency: 0,
         settings: { soundEnabled: true },
         records: defaultRecords(),
+        reunions: [],
+        activeRunStyle: null,
         upgrades: { fabric: 0, steering: 0 },
         sockStyle: { bodyColor: '#ffffff', accentColor: '#e34b4b', patternId: 'plain', patternColor: '#ffffff', toesEnabled: true, cuffEnabled: true },
         unlocks: { colors: [...SOCK_COLORS.map(color => color.hex), '#cc655a', '#8bc78b', '#eecb68'], patterns: SOCK_PATTERNS.map(pattern => pattern.id), cosmetics: [] },
@@ -26,6 +29,7 @@ function validate(raw) {
     const result = defaultProfile();
     if (integer(raw.currency)) result.currency = raw.currency;
     result.records = validateRecords(raw.records);
+    result.reunions = validateReunions(raw.reunions);
     if (typeof raw.settings?.soundEnabled === 'boolean') result.settings.soundEnabled = raw.settings.soundEnabled;
     for (const key of Object.keys(result.upgrades)) {
         if (integer(raw.upgrades?.[key])) result.upgrades[key] = raw.upgrades[key];
@@ -41,15 +45,19 @@ function validate(raw) {
     for (const key of ['toesEnabled', 'cuffEnabled']) {
         if (typeof raw.sockStyle?.[key] === 'boolean') result.sockStyle[key] = raw.sockStyle[key];
     }
-    if (typeof raw.activeRunId === 'string') result.activeRunId = raw.activeRunId;
+    if (typeof raw.activeRunId === 'string') {
+        result.activeRunId = raw.activeRunId;
+        result.activeRunStyle = snapshotReunionStyle(raw.activeRunStyle);
+    }
     return result;
 }
 
 // One instance owns all permanent data. Run weight and score never enter the profile.
 export class PlayerData {
-    constructor(getStorage = () => globalThis.localStorage, createId = () => globalThis.crypto.randomUUID()) {
+    constructor(getStorage = () => globalThis.localStorage, createId = () => globalThis.crypto.randomUUID(), now = () => Date.now()) {
         this.getStorage = getStorage;
         this.createId = createId;
+        this.now = now;
         this.profile = defaultProfile();
         this.loaded = false;
         this.saveError = null;
@@ -94,6 +102,7 @@ export class PlayerData {
         this.load();
         const next = this.getProfile();
         next.activeRunId = this.createId();
+        next.activeRunStyle = snapshotReunionStyle(next.sockStyle);
         this.commit(next);
         return next.activeRunId;
     }
@@ -105,8 +114,14 @@ export class PlayerData {
         const next = this.getProfile();
         next.currency += score;
         next.records = recordCompletedRun(next.records, score, result);
+        if (result?.completed === true && next.activeRunStyle && !next.reunions.some(entry => entry.id === runId)) {
+            const lastNumber = next.reunions.reduce((number, entry) => Math.max(number,entry.number),0);
+            next.reunions.push({id:runId,number:Math.max(next.records.completedRuns,lastNumber+1),
+                completedAt:this.now(),style:snapshotReunionStyle(next.activeRunStyle)});
+        }
         next.activeRunId = null;
-        // Currency, records and the settlement marker are one storage write.
+        next.activeRunStyle = null;
+        // Currency, album, records and the settlement marker are one storage write.
         this.commit(next);
         return true;
     }

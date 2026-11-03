@@ -1,0 +1,55 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Reunions Album check</title>
+<link rel="stylesheet" href="../css/game.css">
+<style>body{padding:0;font:12px Fredoka,sans-serif}button{padding:4px;margin:2px}#status{white-space:pre-wrap;margin:5px;max-height:115px;overflow:auto}#juego{width:min(100vw,400px);height:calc(100vh - 175px);margin:0}#juego canvas{border:0;border-radius:0}</style>
+<button id="outfit">Next test outfit</button><button id="win">Finish real reunion</button><button id="seed">Add 7 pagination samples</button><pre id="status">Loading isolated album…</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';import Boot from '../src/boot.js';import Menu from '../src/menu.js';import Level from '../src/level.js';import End from '../src/end.js';
+import { playerData,defaultProfile,PlayerData } from '../src/player-data.js';
+import { applySockStyle,CUSTOM_SOCK_TEXTURE } from '../src/sock-skin.js';
+const key='falling-socks-reunions-album-isolated-v1';
+const initial=defaultProfile();initial.currency=1234;
+const storage={getItem:()=>sessionStorage.getItem(key)||JSON.stringify(initial),setItem:(_,value)=>sessionStorage.setItem(key,value)};
+playerData.getStorage=()=>storage;
+const outfits=[
+ {bodyColor:'#ed81b1',accentColor:'#e34b4b',patternColor:'#ffffff',patternId:'crescents',toesEnabled:true,cuffEnabled:false},
+ {bodyColor:'#208741',accentColor:'#182c60',patternColor:'#f3cf4b',patternId:'stars',toesEnabled:false,cuffEnabled:true},
+ {bodyColor:'#73bdeb',accentColor:'#ffffff',patternColor:'#ffffff',patternId:'stripes',toesEnabled:true,cuffEnabled:true},
+ {bodyColor:'#f3cf4b',accentColor:'#e34b4b',patternColor:'#182c60',patternId:'squares',toesEnabled:true,cuffEnabled:true},
+ {bodyColor:'#182c60',accentColor:'#ed81b1',patternColor:'#ffffff',patternId:'dots',toesEnabled:false,cuffEnabled:false}
+];
+let outfit=0,visualCheck='No historical textures generated yet.',cleanup='Not yet checked.',baseline=0,lastCheck='';
+function liveHash(scene){const rgba=scene.textures.get(CUSTOM_SOCK_TEXTURE).getSourceImage().getContext('2d').getImageData(0,0,512,512).data;let hash=2166136261;for(let i=0;i<rgba.length;i++)hash=Math.imul(hash^rgba[i],16777619)>>>0;return hash;}
+class TestMenu extends Menu {
+ updateSkinSelection(){super.updateSkinSelection();baseline=liveHash(this);lastCheck='';}
+ create(){super.create();baseline=liveHash(this);lastCheck='';this.events.once('shutdown',()=>{cleanup=this.recordsAlbum.cache.entries.size===0?'PASS: historical textures released on scene shutdown.':'FAIL: texture leak';});}
+ update(){
+  const album=this.recordsAlbum;
+  if(album.section!=='album'||album.turning)return;
+  const signature=`${album.page}/${[...album.cache.entries.values()].join(',')}`;
+  if(signature===lastCheck)return;lastCheck=signature;
+  const images=album.photos.flatMap(photo=>photo.list.filter(object=>object.type==='Image'));
+  const valid=liveHash(this)===baseline&&album.cache.entries.size<=4&&images.length===album.pageData.entries.length*2
+   &&images.every(image=>image.texture.key!==CUSTOM_SOCK_TEXTURE&&image.texture.getSourceImage().width===512&&image.texture.getSourceImage().height===512);
+  visualCheck=valid?`PASS: ${album.photos.length} pairs; ${album.cache.entries.size}/4 static textures; live sock unchanged.`:'FAIL: historical renderer';
+ }
+}
+await document.fonts.load('700 16px Fredoka');await document.fonts.load('700 24px DynaPuff');
+const game=new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,Level,End],audio:{noAudio:true}});
+document.querySelector('#outfit').onclick=()=>{if(!game.scene.isActive('menu'))return;const menu=game.scene.getScene('menu');playerData.selectStyle(outfits[outfit++%outfits.length]);applySockStyle(menu,playerData.getProfile().sockStyle);menu.updateSkinSelection();};
+document.querySelector('#win').onclick=()=>{
+ const level=game.scene.getScene('level');
+ if(game.scene.isActive('level')){level.jumpToCheckpoint(9);return;}
+ const current=game.scene.isActive('menu')?game.scene.getScene('menu'):game.scene.getScene('end');
+ level.events.once('create',()=>level.jumpToCheckpoint(9));current.scene.start('level');
+};
+document.querySelector('#seed').onclick=()=>{
+ if(!game.scene.isActive('menu'))return;
+ const old=playerData.getProfile().sockStyle;
+ for(let i=0;i<7;i++){playerData.selectStyle(outfits[i%outfits.length]);playerData.completeRun(playerData.beginRun(),0,{completed:true});}
+ playerData.selectStyle(old);const menu=game.scene.getScene('menu');applySockStyle(menu,old);menu.scene.restart();
+};
+game.events.on('poststep',()=>{
+ const p=playerData.getProfile();const fresh=new PlayerData(()=>storage).load();
+ document.querySelector('#status').textContent=`ISOLATED SAVE — ${p.reunions.length} photos / ${p.records.completedRuns} completions; wallet ${p.currency}\n${visualCheck}\n${cleanup}\nReload check: ${fresh.reunions.length===p.reunions.length?'PASS':'FAIL'}; first outfit ${p.reunions[0]?.style.bodyColor||'none'}`;
+});
+</script></html>

@@ -1,3 +1,4 @@
+import { reunionStyleKey } from './reunions.js';
 /** Shared cosmetic renderer for all 30 frames; source pixels and alpha stay intact.
  * Toe/heel regions come from the source red paint. The cuff band follows each
  * frame's opaque bounds; these are procedural masks over the flattened artwork.
@@ -173,4 +174,45 @@ export function applySockStyle(scene, style) {
         });
     }
     return texture;
+}
+
+/** Render just frame zero for historical photographs, with the live shader's
+ * exact local coordinates, accent masks and painted shading. Never write to
+ * CUSTOM_SOCK_TEXTURE or rebuild its 30-frame animation sheet. */
+export function recolorStaticSockPixels(source, width, height, style) {
+    if (source.length !== width*height*4 || width < FRAME_SIZE || height < FRAME_SIZE) throw new Error('Invalid static sock source');
+    const frame = new Uint8ClampedArray(FRAME_SIZE*FRAME_SIZE*4);
+    for (let y=0;y<FRAME_SIZE;y++) frame.set(source.subarray(y*width*4,(y*width+FRAME_SIZE)*4),y*FRAME_SIZE*4);
+    return recolorSockPixels(frame,FRAME_SIZE,FRAME_SIZE,style);
+}
+
+let historicalCacheId = 0;
+export class HistoricalSockCache {
+    constructor(scene) {
+        this.scene=scene;
+        this.prefix=`reunion-static-${++historicalCacheId}-`;
+        this.entries=new Map();
+        this.sequence=0;
+    }
+    retain(styles) {
+        const wanted=new Set(styles.map(reunionStyleKey));
+        for(const [signature,key] of this.entries) if(!wanted.has(signature)) {
+            this.scene.textures.remove(key);
+            this.entries.delete(signature);
+        }
+    }
+    get(style) {
+        const signature=reunionStyleKey(style);
+        if(this.entries.has(signature)) return this.entries.get(signature);
+        const original=readSource(this.scene);
+        const pixels=recolorStaticSockPixels(original.pixels,original.width,original.height,style);
+        const key=this.prefix+(++this.sequence);
+        const texture=this.scene.textures.createCanvas(key,FRAME_SIZE,FRAME_SIZE);
+        const context=texture.context;
+        const data=context.createImageData(FRAME_SIZE,FRAME_SIZE);
+        data.data.set(pixels);context.putImageData(data,0,0);texture.refresh();
+        this.entries.set(signature,key);
+        return key;
+    }
+    clear() { this.retain([]); }
 }

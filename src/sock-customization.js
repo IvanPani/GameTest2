@@ -10,6 +10,21 @@ export const SOCK_COLORS = Object.freeze([
     { name: 'Grey', hex: '#90959e' },
     { name: 'Pink', hex: '#ed81b1' }
 ]);
+// Older saves can retain colors from the original customization palette.
+const LEGACY_COLOR_NAMES = { '#cc655a': 'Red', '#8bc78b': 'Soft green', '#eecb68': 'Yellow' };
+export function getSockColorName(value) {
+    const hex = typeof value === 'string' ? value.toLowerCase() : '';
+    const exact = SOCK_COLORS.find(color => color.hex === hex);
+    if (exact) return exact.name;
+    if (LEGACY_COLOR_NAMES[hex]) return LEGACY_COLOR_NAMES[hex];
+    if (!/^#[0-9a-f]{6}$/.test(hex)) return 'Custom';
+    // Keep arbitrary saved shades intact, using their closest palette name.
+    const rgb = color => [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16));
+    const selected = rgb(hex);
+    const distance = color => rgb(color.hex).reduce((sum, channel, i) => sum + (channel - selected[i]) ** 2, 0);
+    return SOCK_COLORS.reduce((closest, color) => distance(color) < distance(closest) ? color : closest).name;
+}
+
 export const SOCK_PATTERNS = Object.freeze([
     { id: 'plain', name: 'NONE' },
     { id: 'stars', name: 'STARS' },

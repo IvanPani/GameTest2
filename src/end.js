@@ -28,6 +28,9 @@ export default class End extends Phaser.Scene {
             this.add.text(200, 225, 'SOCKS REUNITED!', {
                 fontFamily: 'Fredoka, sans-serif', fontSize: '16px', color: '#ffcf70'
             }).setOrigin(0.5);
+            this.add.text(200, 468, 'YOUR PHOTO IS IN RECORDS → REUNIONS', {
+                fontFamily:'Fredoka, sans-serif',fontSize:'10px',color:'#ffcf70'
+            }).setOrigin(0.5);
             this.add.text(200, 451, `REUNIONS  ${playerData.getProfile().records.completedRuns}`, {
                 fontFamily: 'Fredoka, sans-serif', fontSize: '17px', color: '#ffcf70'
             }).setOrigin(0.5);
