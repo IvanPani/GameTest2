@@ -35,3 +35,17 @@ export function getDevCheckpoint(checkpoint) {
     const leadIn = index === LEVEL_REGIONS.length - 1 ? 240 : REGION_BLEND_DISTANCE + 240;
     return { index, distance: (index + (atEnd ? 1 : 0)) * REGION_DISTANCE - (atEnd ? leadIn : 0) };
 }
+
+// Explicit testing switch, also available when testing a built/preview copy.
+export const DEV_CHECKPOINTS_ENABLED = true;
+
+export function getDevShortcut(event) {
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return null;
+    const code = /^(?:Digit|Numpad)([1-9])$/.exec(event.code || '');
+    if (code) return Number(code[1]);
+    if (/^[1-9]$/.test(event.key || '')) return Number(event.key);
+    const value = event.keyCode ?? event.which;
+    if (value >= 49 && value <= 57) return value - 48;
+    if (value >= 97 && value <= 105) return value - 96;
+    return null;
+}

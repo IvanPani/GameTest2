@@ -3,7 +3,7 @@ import Player, { SOCK_VISUALS } from './player.js';
 import { pickupSoundKey, playGameSound } from './game-audio.js';
 import { chooseHazard } from './hazards.js';
 import { CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
-import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint } from './level-regions.js';
+import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint, DEV_CHECKPOINTS_ENABLED, getDevShortcut } from './level-regions.js';
 import { playerData } from './player-data.js';
 import { getRunStats } from './upgrades.js';
 import { COMBO, getComboMultiplier } from './combo.js';
@@ -156,11 +156,11 @@ export default class Level extends Phaser.Scene {
     }
 
     installRegionShortcuts() {
-        if (!import.meta.env.DEV || !this.input.keyboard) return;
+        if (!DEV_CHECKPOINTS_ENABLED || !this.input.keyboard) return;
+        this.input.keyboard.enabled = true;
         const onKey = event => {
-            if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-            const match = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
-            if (match) this.jumpToCheckpoint(Number(match[1]));
+            const checkpoint = getDevShortcut(event);
+            if (checkpoint !== null) this.jumpToCheckpoint(checkpoint);
         };
         this.input.keyboard.on('keydown', onKey);
         this.events.once('shutdown', () => this.input.keyboard.off('keydown', onKey));
@@ -171,7 +171,7 @@ export default class Level extends Phaser.Scene {
 
     jumpToCheckpoint(checkpoint) {
         const destination = getDevCheckpoint(checkpoint);
-        if (!import.meta.env.DEV || this.runEnded || !destination) return;
+        if (!DEV_CHECKPOINTS_ENABLED || this.runEnded || !destination) return;
         const { index, distance } = destination;
         for (const object of [...this.obstacles, ...this.collectibles]) object.shape.destroy();
         this.obstacles = [];

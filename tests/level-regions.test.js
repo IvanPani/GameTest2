@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { LEVEL_REGIONS, REGION_DISTANCE, getRegionProgress, getDevCheckpoint } from '../src/level-regions.js';
+import { LEVEL_REGIONS, REGION_DISTANCE, getRegionProgress, getDevCheckpoint, getDevShortcut, DEV_CHECKPOINTS_ENABLED } from '../src/level-regions.js';
 
 test('all four backgrounds exist in the requested travel order', () => {
     assert.deepEqual(LEVEL_REGIONS.map(region => region.name), ['PIPES', 'RUSTED PIPES', 'SEWER', 'PIT OF LOST THINGS']);
@@ -42,4 +42,16 @@ test('key nine places the sock just before the reunion trigger', () => {
     assert.equal(point.index, LEVEL_REGIONS.length - 1);
     assert.equal(point.distance, LEVEL_REGIONS.length * REGION_DISTANCE - 60);
     assert.ok(point.distance > getDevCheckpoint(8).distance);
+});
+
+test('testing shortcuts are enabled and accept browser, key-name and numpad events', () => {
+    assert.equal(DEV_CHECKPOINTS_ENABLED, true);
+    for (let key = 1; key <= 9; key++) {
+        for (const event of [{code:`Digit${key}`}, {code:`Numpad${key}`}, {key:String(key)},
+            {keyCode:48+key}, {keyCode:96+key}, {which:48+key}]) {
+            assert.equal(getDevShortcut(event), key);
+        }
+    }
+    for (const event of [{key:'0'}, {key:'a'}, {key:'9',repeat:true}, {key:'1',metaKey:true},
+        {key:'2',ctrlKey:true}, {key:'3',altKey:true}]) assert.equal(getDevShortcut(event), null);
 });
