@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
-import Player from './player.js';
+import Player, { SOCK_VISUALS } from './player.js';
+import { CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
+import { LEVEL_REGIONS, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint } from './level-regions.js';
 import { playerData } from './player-data.js';
 import { getRunStats } from './upgrades.js';
 import { COMBO, getComboMultiplier } from './combo.js';
@@ -28,8 +30,6 @@ const MULTIPLIER_STYLE = Object.freeze({
         5: { scale: 1.10, durationMs: 400 }
     })
 });
-// Background moves more slowly than hazards to give the tunnel depth.
-const BACKGROUND_SCROLL_RATIO = 0.02;
 // Distances in pixels: match the original spawn cadence at 190 px/s.
 const SPAWNING = Object.freeze({
     firstObstacleDistance: 95,
@@ -60,6 +60,7 @@ export default class Level extends Phaser.Scene {
         this.runId = playerData.beginRun();
         this.runStats = getRunStats(playerData.getProfile().upgrades);
         this.runEnded = false;
+        this.devInspectionRemaining = 0;
         this.cameras.main.setBackgroundColor('#182b3d');
         this.createShaft();
 
@@ -92,6 +93,7 @@ export default class Level extends Phaser.Scene {
         this.health = this.runStats.maxHealth;
 
         this.createHud();
+        this.installRegionShortcuts();
 
         const onPointerDown = (pointer) => {
             this.targetX = pointer.x;
@@ -112,15 +114,75 @@ export default class Level extends Phaser.Scene {
     }
 
     createShaft() {
-        const texture = this.textures.get('washing-machine-background').getSourceImage();
-        const scale = Math.max(WIDTH / texture.width, HEIGHT / texture.height);
-        this.backgroundHeight = texture.height * scale;
-        this.background = this.add.image(WIDTH / 2, 0, 'washing-machine-background')
-            .setOrigin(0.5, 0)
-            .setScale(scale)
-            .setDepth(-2);
-        this.backgroundOffset = 0;
-        this.backgroundMaxOffset = Math.max(0, this.backgroundHeight - HEIGHT);
+        this.runDistance = 0;
+        this.regionIndex = -1;
+        this.background = this.add.image(WIDTH / 2, 0, LEVEL_REGIONS[0].key)
+            .setOrigin(0.5, 0).setDepth(-2);
+        this.nextBackground = this.add.image(WIDTH / 2, 0, LEVEL_REGIONS[1].key)
+            .setOrigin(0.5, 0).setDepth(-1).setAlpha(0);
+        // The waiting partner shares the exact saved colors, accents and pattern.
+        // A static first frame keeps it resting rather than falling/animating.
+        this.partnerShadow = this.add.ellipse(200, 0, 48, 10, 0x100b23, 0.45).setDepth(0).setVisible(false);
+        this.partnerSock = this.add.image(200, 0, CUSTOM_SOCK_TEXTURE, 0)
+            .setOrigin(0.61, 0.5).setScale(SOCK_VISUALS.scale).setAngle(90).setDepth(0).setVisible(false);
+        this.renderRegion();
+    }
+
+    fitBackground(image, key) {
+        image.setTexture(key);
+        const texture = image.texture.getSourceImage();
+        image.setScale(Math.max(WIDTH / texture.width, HEIGHT / texture.height));
+    }
+
+    renderRegion() {
+        const state = getRegionProgress(this.runDistance);
+        if (state.index !== this.regionIndex) {
+            this.regionIndex = state.index;
+            this.fitBackground(this.background, LEVEL_REGIONS[state.index].key);
+            this.fitBackground(this.nextBackground, LEVEL_REGIONS[Math.min(state.index + 1, LEVEL_REGIONS.length - 1)].key);
+        }
+        this.backgroundMaxOffset = Math.max(0, this.background.displayHeight - HEIGHT);
+        this.backgroundOffset = this.backgroundMaxOffset * state.progress;
+        this.background.y = -this.backgroundOffset;
+        this.nextBackground.y = 0;
+        this.nextBackground.setAlpha(state.blend);
+        const inPit = state.index === LEVEL_REGIONS.length - 1;
+        const floorY = this.background.displayHeight - 75 - this.backgroundOffset;
+        this.partnerSock.setVisible(inPit).setY(floorY - 10);
+        this.partnerShadow.setVisible(inPit).setY(floorY + 7);
+    }
+
+    installRegionShortcuts() {
+        if (!import.meta.env.DEV || !this.input.keyboard) return;
+        const onKey = event => {
+            if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+            const match = /^(?:Digit|Numpad)([1-8])$/.exec(event.code);
+            if (match) this.jumpToCheckpoint(Number(match[1]));
+        };
+        this.input.keyboard.on('keydown', onKey);
+        this.events.once('shutdown', () => this.input.keyboard.off('keydown', onKey));
+        this.add.text(200, HEIGHT - 12, 'DEV: 1–8 AREA START / END', {
+            ...this.hudStyle(11, '#fff0c8'), stroke: '#102131', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(12);
+    }
+
+    jumpToCheckpoint(checkpoint) {
+        const destination = getDevCheckpoint(checkpoint);
+        if (!import.meta.env.DEV || this.runEnded || !destination) return;
+        const { index, distance } = destination;
+        for (const object of [...this.obstacles, ...this.collectibles]) object.shape.destroy();
+        this.obstacles = [];
+        this.collectibles = [];
+        this.introEncounter = null;
+        this.introStep = 0;
+        this.introWaitMs = INTRO.steps[0].delayMs;
+        this.introComplete = checkpoint !== 1;
+        this.obstacleDistance = SPAWNING.firstObstacleDistance;
+        this.collectibleDistance = SPAWNING.firstButtonDistance;
+        this.runDistance = distance;
+        // Give developer inspection a clear view before normal spawning resumes.
+        this.devInspectionRemaining = 8000;
+        this.renderRegion();
     }
 
     createHud() {
@@ -291,7 +353,10 @@ export default class Level extends Phaser.Scene {
         this.scrollShaft(fallSpeed * seconds);
         this.moveObjects(fallSpeed * seconds);
         if (this.runEnded) return;
-        if (this.introComplete) {
+        this.devInspectionRemaining = Math.max(0, (this.devInspectionRemaining || 0) - delta);
+        if (this.devInspectionRemaining > 0) {
+            // Existing movement and run stats continue during checkpoint inspection.
+        } else if (this.introComplete) {
             this.updateSpawns(fallSpeed * seconds);
         } else {
             this.updateIntro(seconds * 1000);
@@ -338,13 +403,8 @@ export default class Level extends Phaser.Scene {
     }
 
     scrollShaft(distance) {
-        // This biome is a single illustration, not a seamless repeating texture.
-        // Hold its final view until a future biome/tutorial transition takes over.
-        this.backgroundOffset = Math.min(
-            this.backgroundOffset + distance * BACKGROUND_SCROLL_RATIO,
-            this.backgroundMaxOffset
-        );
-        this.background.y = -this.backgroundOffset;
+        this.runDistance += distance * BACKGROUND_SPEED_MULTIPLIER;
+        this.renderRegion();
     }
 
     findSpawnX(width, height, y, minX, maxX) {

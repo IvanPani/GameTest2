@@ -63,7 +63,8 @@ test('Steering improves heavy response while retaining weight and zero-weight ha
         const improved = steer(0, 310, 60, 0.05, multiplier);
         assert.ok(improved.velocity > previous);
         assert.ok(improved.distance > base.distance);
-        assert.ok(improved.velocity < steer(0, 310, 0, 0.05, multiplier).velocity);
+        if (level < 5) assert.ok(improved.velocity < steer(0, 310, 0, 0.05, multiplier).velocity);
+        else assert.deepEqual(improved, steer(0, 310, 0, 0.05));
         assert.deepEqual(steer(0, 310, 0, 0.05, multiplier), steer(0, 310, 0, 0.05));
         previous = improved.velocity;
     }
@@ -84,4 +85,16 @@ test('explicit tier purchases cannot skip levels or rebuy owned tiers; tracks ad
     const saved = open().load();
     assert.deepEqual(saved.upgrades, { fabric: 2, steering: 1 });
     assert.equal(saved.currency, 3000);
+});
+
+test('Steering tiers remove delay in 20% steps; max tier immediately turns and stops at every weight', () => {
+    assert.deepEqual(Array.from({ length: 6 }, (_, steering) => getRunStats({ steering }).steeringDelayMultiplier),
+        [1, 0.8, 0.6, 0.4, 0.2, 0]);
+    const max = getRunStats({ steering: 5 }).steeringDelayMultiplier;
+    for (const weight of [0, 6, 15, 30, 60, 600]) {
+        assert.deepEqual(steer(310, -310, weight, 0.05, max), { velocity: -310, distance: -15.5 });
+        assert.deepEqual(steer(310, 0, weight, 0.05, max), { velocity: 0, distance: 0 });
+    }
+    assert.equal(getRunStats({ steering: 999 }).steeringDelayMultiplier, 0);
+    assert.equal(getRunStats({ steering: -1 }).steeringDelayMultiplier, 1);
 });

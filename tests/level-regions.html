@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Four-area development test</title>
+<style>body{margin:0;background:#182b3d;color:white;font:12px sans-serif}#status{white-space:pre-wrap;margin:6px}#juego{width:min(100vw,400px);height:calc(100vh - 110px)}</style>
+<button id="flow">Check automatic progression</button><pre id="status">Loading isolated test…</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';
+import Boot from '../src/boot.js';
+import Menu from '../src/menu.js';
+import Level from '../src/level.js';
+import End from '../src/end.js';
+import { playerData, defaultProfile } from '../src/player-data.js';
+import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getDevCheckpoint } from '../src/level-regions.js';
+const testProfile = defaultProfile();
+testProfile.sockStyle = { ...testProfile.sockStyle, bodyColor: '#182c60', accentColor: '#ed81b1', patternColor: '#f3cf4b', patternId: 'stars' };
+let saved = JSON.stringify(testProfile);
+playerData.getStorage = () => ({getItem: () => saved, setItem: (_, value) => {saved = value;}});
+let checks = 'Press 1–8 to test jumps.';
+const snapshot = level => JSON.stringify({runId:level.runId,score:level.score,health:level.health,weight:level.weight,buttons:level.buttonsCollected,stats:level.runStats,save:saved});
+class TestMenu extends Menu { create() { super.create(); this.scene.start('level'); } }
+class TestLevel extends Level {
+    create() {
+        super.create();
+        // Keep inspection independent of reaction speed; production collision remains untouched.
+        this.overlapsPlayer = () => false;
+    }
+    jumpToCheckpoint(checkpoint) {
+        const before = snapshot(this);
+        super.jumpToCheckpoint(checkpoint);
+        const { index, distance } = getDevCheckpoint(checkpoint);
+        checks = snapshot(this) === before && this.regionIndex === index && this.runDistance === distance
+            && this.obstacles.length === 0 && this.collectibles.length === 0
+            ? `PASS: key ${checkpoint}, checkpoint reached; run/save preserved; objects cleared.` : 'FAIL: jump';
+    }
+}
+const game = new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,TestLevel,End],audio:{noAudio:true}});
+document.querySelector('#flow').onclick = () => {
+    const level = game.scene.getScene('level');
+    const before = snapshot(level);
+    const reached = [];
+    level.runDistance = 0;
+    level.renderRegion();
+    reached.push(level.regionIndex);
+    for (let i=1; i<4; i++) {level.scrollShaft(REGION_DISTANCE / BACKGROUND_SPEED_MULTIPLIER); reached.push(level.regionIndex);}
+    level.scrollShaft(REGION_DISTANCE * 10);
+    checks = JSON.stringify(reached) === '[0,1,2,3]' && snapshot(level) === before && level.regionIndex === 3
+        && level.backgroundOffset === level.backgroundMaxOffset
+        && level.partnerSock.texture.key === level.player.sock.texture.key && !level.partnerSock.anims
+        && level.partnerSock.visible ? 'PASS: all four areas advance in order, pit holds; static partner matches player; run/save preserved.' : 'FAIL: flow';
+};
+game.events.on('poststep', () => {
+    if (!game.scene.isActive('level')) return;
+    const level = game.scene.getScene('level');
+    document.querySelector('#status').textContent = `ISOLATED SAVE / ${LEVEL_REGIONS[level.regionIndex].name}\n${checks}\nHealth ${level.health}; score ${level.score}; weight ${level.weight}; distance ${Math.floor(level.runDistance)}`;
+});
+</script></html>

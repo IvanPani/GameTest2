@@ -7,7 +7,9 @@ export const MOVEMENT = Object.freeze({
     weightPerButton: 0.6,
     steeringSpeed: 310,
     // Response time grows linearly with weight (seconds per kg).
-    steeringDelayPerWeight: 0.005,
+    // Baseline response: 0.3s at 10 buttons, 0.75s at 25, 1.5s at 50.
+    // Steering upgrades progressively remove this inertia, reaching zero at tier 5.
+    steeringDelayPerWeight: 0.05,
     damageInvulnerabilityMs: 2000,
     blinkIntervalMs: 100,
     blinkAlpha: 0.45

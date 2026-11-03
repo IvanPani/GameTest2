@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { LEVEL_REGIONS } from './level-regions.js';
 import { MENU_ART, CUSTOMIZE_ART, UPGRADE_ART, RECORD_ART } from './menu-art.js';
 import { playerData } from './player-data.js';
 import { createHudIcons } from './record-note.js';
@@ -16,10 +17,7 @@ export default class Boot extends Phaser.Scene {
         for (const [key, url] of [...MENU_ART, ...CUSTOMIZE_ART, ...UPGRADE_ART, ...RECORD_ART]) this.load.image(key, url);
         this.load.image('button', new URL('../assets/sprites/button.png', import.meta.url).href);
         this.load.image('soap', new URL('../assets/sprites/soap.png', import.meta.url).href);
-        this.load.image(
-            'washing-machine-background',
-            new URL('../assets/sprites/Background_Washing_Machine2.png', import.meta.url).href
-        );
+        for (const { key, url } of LEVEL_REGIONS) this.load.image(key, url);
         this.load.spritesheet(
             'white-sock-stages',
             new URL('../assets/sprites/Sprite_Sheet_White_Sock_Stages.png', import.meta.url).href,
