@@ -12,19 +12,21 @@ function fixture() {
     return { storage, open };
 }
 
-test('each upgrade level costs exactly 1000, persists, and stops at the cap', () => {
+test('each upgrade tier doubles in cost, persists, and stops at the cap', () => {
     for (const id of Object.keys(UPGRADES)) {
         const { open } = fixture();
         const p = open();
-        p.completeRun(p.beginRun(), 6000);
+        p.completeRun(p.beginRun(), 33000);
+        let spent = 0;
         for (let level = 1; level <= 5; level++) {
             assert.equal(p.purchaseUpgrade(id), true);
             const saved = open().load();
             assert.equal(saved.upgrades[id], level);
-            assert.equal(saved.currency, 6000 - level * 1000);
+            spent += UPGRADES[id].costs[level - 1];
+            assert.equal(saved.currency, 33000 - spent);
         }
         assert.equal(p.purchaseUpgrade(id), false);
-        assert.equal(p.getProfile().currency, 1000);
+        assert.equal(p.getProfile().currency, 2000);
         assert.equal(p.purchaseUpgrade('unknown'), false);
     }
 });
@@ -51,7 +53,7 @@ test('bonuses are immutable run snapshots, one extra heart per Fabric level', ()
     assert.equal(run.maxHealth, 4);
     assert.equal(getRunStats(owned).maxHealth, 8);
     assert.ok(Object.isFrozen(run));
-    assert.deepEqual(getRunStats(), { maxHealth: 3, steeringDelayMultiplier: 1 });
+    assert.deepEqual(getRunStats(), { maxHealth: 3, steeringDelayMultiplier: 1, steeringSpeedMultiplier: 1 });
     assert.equal(getRunStats({ fabric: 999999, steering: 999999 }).maxHealth, 8);
 });
 
@@ -84,7 +86,7 @@ test('explicit tier purchases cannot skip levels or rebuy owned tiers; tracks ad
     assert.equal(p.purchaseUpgrade('fabric', 2), true);
     const saved = open().load();
     assert.deepEqual(saved.upgrades, { fabric: 2, steering: 1 });
-    assert.equal(saved.currency, 3000);
+    assert.equal(saved.currency, 2000);
 });
 
 test('Steering tiers remove delay in 20% steps; max tier immediately turns and stops at every weight', () => {
@@ -97,4 +99,23 @@ test('Steering tiers remove delay in 20% steps; max tier immediately turns and s
     }
     assert.equal(getRunStats({ steering: 999 }).steeringDelayMultiplier, 0);
     assert.equal(getRunStats({ steering: -1 }).steeringDelayMultiplier, 1);
+});
+
+test('each Steering upgrade increases traversal speed while the base keyboard speed stays unchanged', () => {
+    const multipliers = Array.from({length:6}, (_, steering) => getRunStats({steering}).steeringSpeedMultiplier);
+    assert.deepEqual(multipliers, [1,1.1,1.2,1.3,1.4,1.5]);
+    const base = steer(0,310,0,1,1);
+    const maxStats = getRunStats({steering:5});
+    const upgraded = steer(0,310*maxStats.steeringSpeedMultiplier,60,1,maxStats.steeringDelayMultiplier);
+    assert.equal(base.distance,310);
+    assert.equal(upgraded.distance,465);
+});
+
+test('both upgrade paths use the requested prices, with no discount for later tiers', () => {
+    for (const id of ['fabric','steering']) assert.deepEqual(UPGRADES[id].costs,[1000,2000,4000,8000,16000]);
+    const p=fixture().open();
+    p.completeRun(p.beginRun(),2000);
+    assert.equal(p.purchaseUpgrade('steering'),true);
+    assert.equal(p.purchaseUpgrade('steering'),false);
+    assert.equal(p.getProfile().currency,1000);
 });

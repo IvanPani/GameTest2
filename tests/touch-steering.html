@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Touch steering check</title>
+<style>body{margin:0;background:#182b3d;color:white;font:12px sans-serif}button{padding:5px;margin:2px}#status{white-space:pre-wrap;margin:6px}#juego{width:min(100vw,400px);height:calc(100vh - 145px)}</style>
+<button id="checks">Check input behavior</button><button id="base">Base steering</button><button id="max">Max steering</button><pre id="status">Loading isolated save…</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';import Boot from '../src/boot.js';import Menu from '../src/menu.js';import Level from '../src/level.js';import End from '../src/end.js';
+import {playerData} from '../src/player-data.js';import {getRunStats} from '../src/upgrades.js';
+let saved=null;playerData.getStorage=()=>({getItem:()=>saved,setItem:(_,value)=>{saved=value;}});
+let check='Tap anywhere: no jump. Drag sideways to steer.';
+class TestMenu extends Menu{create(){super.create();this.scene.start('level');}}
+class TestLevel extends Level{update(time,delta){this.movePlayer(Math.min(delta,50)/1000);}}
+const game=new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,TestLevel,End],audio:{noAudio:true}});
+const reset=tier=>{const level=game.scene.getScene('level');level.player.x=200;level.targetX=200;level.steeringVelocity=0;level.pointerSteering=false;level.dragSteering.cancel();level.weight=0;level.runStats=getRunStats({steering:tier});return level;};
+document.querySelector('#base').onclick=()=>reset(0);document.querySelector('#max').onclick=()=>reset(5);
+document.querySelector('#checks').onclick=()=>{
+ const assert=(value,message)=>{if(!value)throw Error(message);};
+ try{
+  const level=reset(0);const before=JSON.stringify(playerData.getProfile());
+  level.input.emit('pointerdown',{id:1,x:350,isDown:true});level.movePlayer(.05);assert(level.player.x===200,'tap jumped');
+  level.input.emit('pointermove',{id:1,x:250,isDown:true});level.movePlayer(.05);
+  assert(level.targetX===100&&Math.abs(level.player.x-200)<=15.51,'drag teleported or wrong target');
+  level.input.emit('pointerdown',{id:2,x:5,isDown:true});assert(level.targetX===100,'second finger stole drag');
+  level.input.emit('pointerupoutside',{id:1});const released=level.player.x;level.movePlayer(.05);assert(level.player.x===released&&!level.pointerSteering,'release kept chasing');
+  reset(0);level.cursors.right.isDown=true;level.movePlayer(.1);assert(Math.abs(level.player.x-231)<1e-6,'base keyboard changed');level.cursors.right.isDown=false;
+  reset(5);level.cursors.right.isDown=true;level.movePlayer(.1);assert(Math.abs(level.player.x-246.5)<1e-6,'upgrade speed not applied');level.cursors.right.isDown=false;
+  assert(JSON.stringify(playerData.getProfile())===before,'save changed');reset(0);
+  check='PASS: no tap jump; bounded relative drag; outside release; second finger ignored.\nPASS: arrows 310 → 465 px/s; save unchanged.';
+ }catch(error){check='FAIL: '+error.message;}
+};
+game.events.on('poststep',()=>{if(!game.scene.isActive('level'))return;const level=game.scene.getScene('level');document.querySelector('#status').textContent=check+`\nX ${level.player.x.toFixed(1)}; target ${level.targetX.toFixed(1)}; dragging ${level.pointerSteering}; speed ×${level.runStats.steeringSpeedMultiplier}`;});
+</script></html>

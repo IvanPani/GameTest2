@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Run HUD controls check</title>
+<style>body{margin:0;background:#182b3d;color:white;font:12px sans-serif}button{padding:4px;margin:2px}#status{white-space:pre-wrap;margin:5px}#juego{width:min(100vw,400px);height:calc(100vh - 140px)}</style>
+<button id="collect">Collect test button</button><button id="finish">End test run</button><pre id="status">Loading isolated save…</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';import Boot from '../src/boot.js';import Menu from '../src/menu.js';import Level from '../src/level.js';import End from '../src/end.js';import {playerData,defaultProfile} from '../src/player-data.js';
+let saved=sessionStorage.getItem('run-controls-test-save')||JSON.stringify({...defaultProfile(),currency:5000});
+playerData.getStorage=()=>({getItem:()=>saved,setItem:(_,value)=>{saved=value;sessionStorage.setItem('run-controls-test-save',value);}});
+let launched=false,baseline=null,check='Use PAUSE and SOUND beneath the run counter.';
+class TestMenu extends Menu{create(){super.create();if(!launched){launched=true;this.scene.start('level');}}}
+class TestLevel extends Level{create(){super.create();this.overlapsPlayer=()=>false;}}
+const game=new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,TestLevel,End]});
+const interact=action=>{if(!game.scene.isActive('level'))return;const level=game.scene.getScene('level');if(level.runPaused||level.runEnded)return;for(const object of [...level.obstacles,...level.collectibles])object.shape.destroy();level.obstacles=[];level.collectibles=[];level.overlapsPlayer=()=>true;action(level);level.moveObjects(0);level.overlapsPlayer=()=>false;};
+document.querySelector('#collect').onclick=()=>interact(level=>level.spawnCollectible());
+document.querySelector('#finish').onclick=()=>interact(level=>{level.health=1;level.damageTimer=0;level.spawnObstacle();});
+const snapshot=level=>JSON.stringify({distance:level.runDistance,elapsed:level.elapsed,wait:level.introWaitMs,x:level.player.x,score:level.score,health:level.health,objects:[...level.obstacles,...level.collectibles].map(o=>o.shape.y),frame:level.player.sock.frame.name});
+game.events.on('poststep',()=>{
+ const p=playerData.getProfile();
+ if(!game.scene.isActive('level')){document.querySelector('#status').textContent=`ISOLATED SAVE: wallet ${p.currency}; sound ${p.settings.soundEnabled?'ON':'OFF'}\nRun ended; earned currency is now in the wallet.`;return;}
+ const level=game.scene.getScene('level');
+ if(level.runPaused){if(baseline===null)baseline=snapshot(level);else check=snapshot(level)===baseline?'PASS: gameplay, tutorial and animation frozen while HUD stays interactive.':'FAIL: paused state moved';}else{baseline=null;}
+ const width=level.pauseControl.button.displayWidth+6+level.soundControl.button.displayWidth;
+ document.querySelector('#status').textContent=`ISOLATED SAVE / wallet ${p.currency}; run HUD ${level.currencyText.text}\n${check}\nPaused ${level.runPaused}; sound ${p.settings.soundEnabled?'ON':'OFF'}; control width ${width}/${level.currencyBadge.displayWidth}`;
+});
+</script></html>

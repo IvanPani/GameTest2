@@ -64,6 +64,7 @@ export default class Boot extends Phaser.Scene {
         getFrameMask(this.textures.getFrame('button'));
         createHudIcons(this);
         playerData.load();
+        this.sound.mute = !playerData.getProfile().settings.soundEnabled;
         applySockStyle(this, playerData.getProfile().sockStyle);
         const customStages = this.textures.get(CUSTOM_SOCK_TEXTURE);
         for (let frame = 0; frame < 30; frame += 1) getFrameMask(customStages.get(frame));

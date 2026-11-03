@@ -12,6 +12,7 @@ export function defaultProfile() {
     return {
         schemaVersion: 1,
         currency: 0,
+        settings: { soundEnabled: true },
         records: defaultRecords(),
         upgrades: { fabric: 0, steering: 0 },
         sockStyle: { bodyColor: '#ffffff', accentColor: '#e34b4b', patternId: 'plain', patternColor: '#ffffff', toesEnabled: true, cuffEnabled: true },
@@ -25,6 +26,7 @@ function validate(raw) {
     const result = defaultProfile();
     if (integer(raw.currency)) result.currency = raw.currency;
     result.records = validateRecords(raw.records);
+    if (typeof raw.settings?.soundEnabled === 'boolean') result.settings.soundEnabled = raw.settings.soundEnabled;
     for (const key of Object.keys(result.upgrades)) {
         if (integer(raw.upgrades?.[key])) result.upgrades[key] = raw.upgrades[key];
     }
@@ -105,6 +107,15 @@ export class PlayerData {
         next.records = recordCompletedRun(next.records, score, result);
         next.activeRunId = null;
         // Currency, records and the settlement marker are one storage write.
+        this.commit(next);
+        return true;
+    }
+
+    setSoundEnabled(enabled) {
+        this.load();
+        if (typeof enabled !== 'boolean') return false;
+        const next = this.getProfile();
+        next.settings.soundEnabled = enabled;
         this.commit(next);
         return true;
     }

@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { createRunControls } from './run-controls.js';
+import { RelativeDrag, getDragVelocity } from './drag-steering.js';
 import { createTransitionForeground } from './transition-foreground.js';
 import Player, { SOCK_VISUALS } from './player.js';
 import { pickupSoundKey, playGameSound } from './game-audio.js';
@@ -61,6 +63,8 @@ export default class Level extends Phaser.Scene {
 
     create() {
         this.input.enabled = true;
+        this.runPaused = false;
+        this.time.paused = false;
         this.runId = playerData.beginRun();
         this.runStats = getRunStats(playerData.getProfile().upgrades);
         this.runEnded = false;
@@ -85,7 +89,6 @@ export default class Level extends Phaser.Scene {
         this.collectibleDistance = SPAWNING.firstButtonDistance;
         this.damageTimer = 0;
         this.score = 0;
-        this.currencyAtRunStart = playerData.getProfile().currency;
         this.buttonsCollected = 0;
         this.combo = 0;
         this.testMultiplier = 1;
@@ -99,21 +102,45 @@ export default class Level extends Phaser.Scene {
         this.createHud();
         this.installRegionShortcuts();
 
-        const onPointerDown = (pointer) => {
-            this.targetX = pointer.x;
+        this.dragSteering = new RelativeDrag(42, WIDTH - 42);
+        const onPointerDown = pointer => {
+            if (this.runEnded || this.runPaused) return;
+            const target = this.dragSteering.begin(pointer.id, pointer.x, this.player.x);
+            if (target === null) return;
+            this.targetX = target;
             this.pointerSteering = true;
         };
-        const onPointerMove = (pointer) => {
-            if (pointer.isDown) {
-                this.targetX = pointer.x;
-                this.pointerSteering = true;
-            }
+        const onPointerMove = pointer => {
+            if (this.runEnded || this.runPaused || !pointer.isDown) return;
+            const target = this.dragSteering.move(pointer.id, pointer.x);
+            if (target === null) return;
+            this.targetX = target;
+            this.pointerSteering = true;
+        };
+        const onPointerUp = pointer => {
+            if (!this.dragSteering.end(pointer.id)) return;
+            this.pointerSteering = false;
+            this.targetX = this.player.x;
+        };
+        const cancelDrag = () => {
+            this.dragSteering.cancel();
+            this.pointerSteering = false;
+            this.targetX = this.player.x;
+            this.steeringVelocity = 0;
         };
         this.input.on('pointerdown', onPointerDown);
         this.input.on('pointermove', onPointerMove);
+        this.input.on('pointerup', onPointerUp);
+        this.input.on('pointerupoutside', onPointerUp);
+        this.input.on('gameout', cancelDrag);
+        this.game.events.on('blur', cancelDrag);
         this.events.once('shutdown', () => {
             this.input.off('pointerdown', onPointerDown);
             this.input.off('pointermove', onPointerMove);
+            this.input.off('pointerup', onPointerUp);
+            this.input.off('pointerupoutside', onPointerUp);
+            this.input.off('gameout', cancelDrag);
+            this.game.events.off('blur', cancelDrag);
         });
     }
 
@@ -180,7 +207,7 @@ export default class Level extends Phaser.Scene {
         this.input.keyboard.enabled = true;
         const onKey = event => {
             const checkpoint = getDevShortcut(event);
-            if (checkpoint !== null) this.jumpToCheckpoint(checkpoint);
+            if (checkpoint !== null && !this.runPaused) this.jumpToCheckpoint(checkpoint);
         };
         this.input.keyboard.on('keydown', onKey);
         this.events.once('shutdown', () => this.input.keyboard.off('keydown', onKey));
@@ -191,7 +218,7 @@ export default class Level extends Phaser.Scene {
 
     jumpToCheckpoint(checkpoint) {
         const destination = getDevCheckpoint(checkpoint);
-        if (!DEV_CHECKPOINTS_ENABLED || this.runEnded || !destination) return;
+        if (!DEV_CHECKPOINTS_ENABLED || this.runEnded || this.runPaused || !destination) return;
         const { index, distance } = destination;
         for (const object of [...this.obstacles, ...this.collectibles]) object.shape.destroy();
         this.obstacles = [];
@@ -232,7 +259,8 @@ export default class Level extends Phaser.Scene {
         this.currencyText = this.add.text(WIDTH - 55, 35, '', {
             ...this.hudStyle(14, '#4b3027')
         }).setOrigin(0.5).setDepth(12);
-        this.comboText = this.add.text(WIDTH - 12, 104, '', {
+        createRunControls(this);
+        this.comboText = this.add.text(WIDTH - 12, 132, '', {
             ...this.hudStyle(MULTIPLIER_STYLE.fontSize, MULTIPLIER_STYLE.yellow),
             stroke: MULTIPLIER_STYLE.outline,
             strokeThickness: MULTIPLIER_STYLE.outlineWidth,
@@ -260,7 +288,7 @@ export default class Level extends Phaser.Scene {
     }
 
     updateHud() {
-        this.currencyText.setText((this.currencyAtRunStart + this.score).toLocaleString('en-US'));
+        this.currencyText.setText(this.score.toLocaleString('en-US'));
         const multiplier = this.getActiveMultiplier();
         this.updateMultiplier(multiplier);
         this.weightText.setText(`${this.weight.toFixed(1)} KG`);
@@ -362,7 +390,7 @@ export default class Level extends Phaser.Scene {
     }
 
     update(_time, delta) {
-        if (this.runEnded) return;
+        if (this.runEnded || this.runPaused) return;
         const seconds = Math.min(delta, 50) / 1000;
         this.elapsed += delta;
         this.damageTimer = Math.max(0, this.damageTimer - delta);
@@ -380,7 +408,7 @@ export default class Level extends Phaser.Scene {
             return;
         }
         this.moveObjects(fallSpeed * seconds);
-        if (this.runEnded) return;
+        if (this.runEnded || this.runPaused) return;
         this.devInspectionRemaining = Math.max(0, (this.devInspectionRemaining || 0) - delta);
         if (this.devInspectionRemaining > 0) {
             // Existing movement and run stats continue during checkpoint inspection.
@@ -402,14 +430,16 @@ export default class Level extends Phaser.Scene {
         const right = this.cursors?.right.isDown;
         const direction = left === right ? 0 : (left ? -1 : 1);
         if (direction !== 0) {
+            this.dragSteering.cancel();
             this.pointerSteering = false;
         }
 
         this.targetX = Phaser.Math.Clamp(this.targetX, 42, WIDTH - 42);
         const difference = this.targetX - this.player.x;
+        const maxSpeed = MOVEMENT.steeringSpeed * this.runStats.steeringSpeedMultiplier;
         const targetVelocity = direction !== 0
-            ? direction * MOVEMENT.steeringSpeed
-            : (this.pointerSteering ? Math.sign(difference) * MOVEMENT.steeringSpeed : 0);
+            ? direction * maxSpeed
+            : (this.pointerSteering ? getDragVelocity(difference, maxSpeed) : 0);
         const movement = steer(this.steeringVelocity, targetVelocity, this.weight, seconds, this.runStats.steeringDelayMultiplier);
         this.steeringVelocity = movement.velocity;
 
@@ -571,12 +601,14 @@ export default class Level extends Phaser.Scene {
     }
 
     beginReunion() {
-        if (this.runEnded) return;
+        if (this.runEnded || this.runPaused) return;
         this.runEnded = true;
         this.runDistance = LEVEL_REGIONS.length * REGION_DISTANCE;
         this.renderRegion();
         // Freeze danger and steering as soon as the floor is reached.
         this.input.enabled = false;
+        this.dragSteering.cancel();
+        this.pointerSteering = false;
         for (const object of [...this.obstacles, ...this.collectibles]) object.shape.destroy();
         this.obstacles = [];
         this.collectibles = [];

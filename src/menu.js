@@ -377,7 +377,7 @@ export default class Menu extends Phaser.Scene {
         }
         panel.add(this.add.rectangle(200, 567, 366, 28, 0x102131, 0.8));
         const stats = getRunStats(playerData.getProfile().upgrades);
-        this.shopMessage = this.label(panel, 200, 567, `${stats.maxHealth} HEARTS • ${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% LESS WEIGHT DELAY`, 14, '#ffcf70');
+        this.shopMessage = this.label(panel, 200, 567, `${stats.maxHealth} HEARTS • +${Math.round((stats.steeringSpeedMultiplier - 1) * 100)}% SPEED • -${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% DELAY`, 14, '#ffcf70');
         const back = art(300, 610, 'upgrade-back', 183).setInteractive({ useHandCursor: true });
         this.label(panel, 300, 610, 'WASHING ROOM  >', 17, '#392e24');
         back.on('pointerdown', () => this.navigate('main'));
@@ -401,7 +401,7 @@ export default class Menu extends Phaser.Scene {
             item.check.setVisible(owned);
             item.lock.setVisible(!owned && !next);
             item.highlight.setVisible(next);
-            item.status.setText(owned ? 'OWNED' : next ? '1,000' : 'LOCKED');
+            item.status.setText(owned ? 'OWNED' : next ? price.toLocaleString('en-US') : 'LOCKED');
             item.status.setColor(owned ? '#258a48' : next && profile.currency < price ? '#9e553d' : '#665543');
         }
         this.refreshControls();
@@ -415,8 +415,8 @@ export default class Menu extends Phaser.Scene {
         const stats = getRunStats(playerData.getProfile().upgrades);
         this.shopMessage.setText((purchased ? id === 'fabric'
             ? `Fabric improved! Next run: ${stats.maxHealth} hearts.`
-            : `Steering improved! ${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% less weight delay.`
-            : playerData.saveError ? 'Could not save purchase. No currency spent.' : 'You need 1,000 currency for this level.').toUpperCase());
+            : `+${Math.round((stats.steeringSpeedMultiplier - 1) * 100)}% SPEED • -${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% WEIGHT DELAY`
+            : playerData.saveError ? 'Could not save purchase. No currency spent.' : `YOU NEED ${UPGRADES[id].costs[tier - 1].toLocaleString('en-US')} CURRENCY FOR THIS LEVEL.`).toUpperCase());
         this.updateShop();
     }
 
