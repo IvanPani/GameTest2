@@ -3,6 +3,8 @@ export const MOVEMENT = Object.freeze({
     // Fantasy speed shown at the starting gameplay speed; display only.
     displayedBaseSpeedKmh: 30,
     baseFallSpeed: 190,
+    // 190 px/s represents 30 km/h, so 760 px/s is the 120 km/h cap.
+    maxFallSpeed: 760,
     fallSpeedPerButton: 2.5,
     weightPerButton: 0.6,
     steeringSpeed: 310,
@@ -20,7 +22,7 @@ export function getWeight(buttons) {
 }
 
 export function getFallSpeed(buttons) {
-    return MOVEMENT.baseFallSpeed + buttons * MOVEMENT.fallSpeedPerButton;
+    return Math.min(MOVEMENT.maxFallSpeed, MOVEMENT.baseFallSpeed + buttons * MOVEMENT.fallSpeedPerButton);
 }
 
 // Exact exponential response and integrated travel: independent of frame rate.

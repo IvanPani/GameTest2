@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { SPAWNING, getHazardSpawnGap } from './run-balance.js';
 import { createRunControls } from './run-controls.js';
 import { RelativeDrag, getDragVelocity } from './drag-steering.js';
 import { createTransitionForeground } from './transition-foreground.js';
@@ -35,17 +36,6 @@ const MULTIPLIER_STYLE = Object.freeze({
         5: { scale: 1.10, durationMs: 400 }
     })
 });
-// Distances in pixels: match the original spawn cadence at 190 px/s.
-const SPAWNING = Object.freeze({
-    firstObstacleDistance: 95,
-    firstButtonDistance: 152,
-    obstacleGapMin: 162,
-    obstacleGapMax: 247,
-    buttonGapMin: 190,
-    buttonGapMax: 295,
-    clearance: 24
-});
-
 // Delays begin once the previous tutorial object is collected or passes the sock.
 const INTRO = Object.freeze({
     steps: [
@@ -511,7 +501,8 @@ export default class Level extends Phaser.Scene {
 
         if (this.obstacleDistance <= 0) {
             this.spawnObstacle();
-            this.obstacleDistance = Phaser.Math.Between(SPAWNING.obstacleGapMin, SPAWNING.obstacleGapMax);
+            this.obstacleDistance = getHazardSpawnGap(
+                this.runDistance / (LEVEL_REGIONS.length * REGION_DISTANCE), () => Phaser.Math.RND.frac());
         }
         if (this.collectibleDistance <= 0) {
             this.spawnCollectible();

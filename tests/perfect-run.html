@@ -1,0 +1,70 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Perfect collection timing benchmark</title>
+<style>body{margin:0;background:#182b3d;color:white;font:12px sans-serif}button{margin:3px;padding:5px}#status{white-space:pre-wrap;margin:5px;max-height:145px;overflow:auto}#report{white-space:pre-wrap;max-height:180px;overflow:auto}#juego{width:min(100vw,400px);height:calc(100vh - 205px)}</style>
+<button id="real">Run at normal speed</button><button id="fast">Measure quickly</button><pre id="status">Loading…</pre><details><summary>Detailed timing data</summary><pre id="report"></pre></details><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';import Boot from '../src/boot.js';import Menu from '../src/menu.js';import Level from '../src/level.js';import End from '../src/end.js';
+import {playerData,defaultProfile} from '../src/player-data.js';import {getSpeedKmh,getFallSpeed,MOVEMENT} from '../src/movement.js';import {LEVEL_REGIONS} from '../src/level-regions.js';
+const profile=defaultProfile();profile.upgrades={fabric:5,steering:5};profile.settings.soundEnabled=false;
+let saved=JSON.stringify(profile);playerData.getStorage=()=>({getItem:()=>saved,setItem:(_,value)=>{saved=value;}});
+let running=false,fast=false,done=false,report=null,started=0,previous=null,impossible=null,milestones=[],missed=0;
+const time=seconds=>{const rounded=Math.round(seconds);return `${Math.floor(rounded/60)}:${String(rounded%60).padStart(2,'0')}`;};
+class TestMenu extends Menu{create(){super.create();this.scene.start('level');}}
+class Benchmark extends Level{
+ create(){super.create();Phaser.Math.RND.sow(['falling-socks-perfect-benchmark-v1']);
+  this.add.text(200,143,'ASSISTED TIMING TEST',{fontFamily:'sans-serif',fontSize:'12px',color:'#ffcf70',stroke:'#102131',strokeThickness:3}).setOrigin(.5).setDepth(12);
+  // Explicit idealisation: pickup timing uses real vertical collision bounds,
+  // assumes perfect horizontal alignment and assumes every hazard is dodged.
+  // All production speed, score, tutorial, spawns and completion logic stay intact.
+  this.overlapsPlayer=object=>{
+   if(object.shape.texture.key!=='button')return false;
+   const a=this.player.sock.getBounds(),b=object.shape.getBounds();
+   const hit=b.bottom>=a.top&&b.top<=a.bottom;
+   if(hit&&!object.benchmarkRecorded){
+    object.benchmarkRecorded=true;
+    const event={seconds:this.elapsed/1000,x:object.shape.x,speed:getFallSpeed(this.buttonsCollected)};
+    if(previous){
+     // Generous upper bound: extra full collision-window time and full sprite
+     // box widths (larger than opaque silhouettes), with instantaneous steering.
+     const radius=a.width/2+b.width/2;
+     const available=event.seconds-previous.seconds+2*(a.height+b.height)/previous.speed;
+     const maximum=465*available+2*radius;
+     if(Math.abs(event.x-previous.x)>maximum&&(!impossible||Math.abs(event.x-previous.x)-maximum>impossible.gapX-impossible.maximumReach))impossible={atSeconds:event.seconds,pickup:this.buttonsCollected+1,
+      gapX:Math.abs(event.x-previous.x),maximumReach:maximum,availableSeconds:available};
+    }
+    previous=event;
+   }
+   return hit;
+  };
+ }
+ moveObjects(distance){
+  super.moveObjects(distance);
+  for(const object of this.collectibles)if(object.missed&&!object.benchmarkMissCounted){object.benchmarkMissCounted=true;missed++;}
+ }
+ update(t,delta){
+  if(!running||done)return;
+  const ticks=fast?240:1;
+  for(let i=0;i<ticks&&!this.runEnded;i++){
+   const beforeRegion=this.regionIndex;
+   super.update(t,fast?1000/120:delta);
+   if(this.regionIndex!==beforeRegion)milestones.push({area:LEVEL_REGIONS[this.regionIndex].name,seconds:this.elapsed/1000,buttons:this.buttonsCollected,speedKmh:getSpeedKmh(this.buttonsCollected)});
+  }
+ }
+ beginReunion(){
+  if(this.runEnded)return;
+  report={mode:'ASSISTED ideal timing; horizontal pickup alignment and hazard dodges assumed',
+   seconds:this.elapsed/1000,formatted:time(this.elapsed/1000),buttons:this.buttonsCollected,score:this.score,
+   finalSpeedKmh:getSpeedKmh(this.buttonsCollected),fallPixelsPerSecond:getFallSpeed(this.buttonsCollected),weightKg:this.weight,
+   missedEncounteredButtons:missed,hits:this.runStats.maxHealth-this.health,milestones,unreachablePair:impossible};
+  done=true;super.beginReunion();
+ }
+}
+const game=new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,Benchmark,End],audio:{noAudio:true}});
+const start=quick=>{if(running)return;fast=quick;running=true;started=performance.now();};
+document.querySelector('#real').onclick=()=>start(false);document.querySelector('#fast').onclick=()=>start(true);
+game.events.on('poststep',()=>{
+ if(!game.scene.isActive('level')&&!report)return;
+ const level=game.scene.getScene('level');
+ if(report){document.querySelector('#report').textContent=JSON.stringify(report,null,2);document.querySelector('#status').textContent=`ASSISTED IDEAL RUN COMPLETE — not a physical steering test\n${report.formatted} to the floor; ${report.buttons} buttons; ${report.finalSpeedKmh.toFixed(1)} KM/H final\n${report.score.toLocaleString()} currency; ${report.weightKg.toFixed(1)} KG\n${report.missedEncounteredButtons} missed encounters; ${report.hits} hits (assisted)\nOpen detailed timing data for biome split times and reachability.\nYour actual save is untouched.`;return;}
+ document.querySelector('#status').textContent=`ASSISTED IDEAL TIMING — not a legitimate steering run\nEvery vertically encountered button collected; hazards assumed dodged.\n${running?(fast?'Accelerated simulation':'Normal speed'):'Choose normal speed or quick measurement.'}\nTime ${time((level.elapsed||0)/1000)}; buttons ${level.buttonsCollected||0}; speed ${getSpeedKmh(level.buttonsCollected||0).toFixed(1)} KM/H\n${LEVEL_REGIONS[level.regionIndex||0].name}; health ${level.health||8}/8\nYour actual save is untouched.`;
+});
+</script></html>

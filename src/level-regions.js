@@ -1,7 +1,8 @@
 // Change these distances to tune area lengths without changing run mechanics.
 // Visual travel only: hazards, steering and button physics retain their speed.
 // Target approximately four minutes across all four areas with ideal collection.
-export const BACKGROUND_SPEED_MULTIPLIER = 0.18;
+// Retain the 3–5 minute ideal run target with fewer pickups and capped speed.
+export const BACKGROUND_SPEED_MULTIPLIER = 0.23;
 // Preserve the total route length after removing Washing Machine.
 export const REGION_DISTANCE = 7500;
 export const STACK_SEAM_OVERLAP = 32;
