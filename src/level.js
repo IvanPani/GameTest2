@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import Player, { SOCK_VISUALS } from './player.js';
+import { chooseHazard } from './hazards.js';
 import { CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
-import { LEVEL_REGIONS, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint } from './level-regions.js';
+import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint } from './level-regions.js';
 import { playerData } from './player-data.js';
 import { getRunStats } from './upgrades.js';
 import { COMBO, getComboMultiplier } from './combo.js';
@@ -57,6 +58,7 @@ export default class Level extends Phaser.Scene {
     }
 
     create() {
+        this.input.enabled = true;
         this.runId = playerData.beginRun();
         this.runStats = getRunStats(playerData.getProfile().upgrades);
         this.runEnded = false;
@@ -156,12 +158,12 @@ export default class Level extends Phaser.Scene {
         if (!import.meta.env.DEV || !this.input.keyboard) return;
         const onKey = event => {
             if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-            const match = /^(?:Digit|Numpad)([1-8])$/.exec(event.code);
+            const match = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
             if (match) this.jumpToCheckpoint(Number(match[1]));
         };
         this.input.keyboard.on('keydown', onKey);
         this.events.once('shutdown', () => this.input.keyboard.off('keydown', onKey));
-        this.add.text(200, HEIGHT - 12, 'DEV: 1–8 AREA START / END', {
+        this.add.text(200, HEIGHT - 12, 'DEV: 1–8 AREAS • 9 ENDING', {
             ...this.hudStyle(11, '#fff0c8'), stroke: '#102131', strokeThickness: 3
         }).setOrigin(0.5).setDepth(12);
     }
@@ -298,10 +300,11 @@ export default class Level extends Phaser.Scene {
         }
     }
 
-    spawnObstacle(preferredX = null) {
-        const frames = ['small', 'medium', 'large'];
-        const frame = frames[Phaser.Math.Between(0, frames.length - 1)];
-        const textureFrame = this.textures.getFrame('soap', frame);
+    spawnObstacle(preferredX = null, hazardKey = null) {
+        const key = hazardKey ?? chooseHazard(this.regionIndex);
+        const soapFrames = ['small', 'medium', 'large'];
+        const frame = key === 'soap' ? soapFrames[Phaser.Math.Between(0, soapFrames.length - 1)] : 'object';
+        const textureFrame = this.textures.getFrame(key, frame);
         const size = Phaser.Math.Between(54, 80);
         const scale = size / Math.max(textureFrame.width, textureFrame.height);
         const displayWidth = textureFrame.width * scale;
@@ -317,9 +320,9 @@ export default class Level extends Phaser.Scene {
         const x = this.findSpawnX(width, height, HEIGHT + height,
             requestedX ?? minX, requestedX ?? maxX);
         if (x === null) return;
-        const shape = this.add.image(x, HEIGHT + height, 'soap', frame)
+        const shape = this.add.image(x, HEIGHT + height, key, frame)
             .setScale(scale).setAngle(angle).setDepth(1);
-        const obstacle = { shape, width, height };
+        const obstacle = { shape, width, height, hazardKey: key };
         this.obstacles.push(obstacle);
         return obstacle;
     }
@@ -351,6 +354,10 @@ export default class Level extends Phaser.Scene {
 
         const fallSpeed = getFallSpeed(this.buttonsCollected);
         this.scrollShaft(fallSpeed * seconds);
+        if (this.runDistance >= LEVEL_REGIONS.length * REGION_DISTANCE) {
+            this.beginReunion();
+            return;
+        }
         this.moveObjects(fallSpeed * seconds);
         if (this.runEnded) return;
         this.devInspectionRemaining = Math.max(0, (this.devInspectionRemaining || 0) - delta);
@@ -441,7 +448,7 @@ export default class Level extends Phaser.Scene {
         }
         // Place each lesson relative to the sock's current position.
         const x = this.player.x + step.offsetX;
-        const object = step.type === 'button' ? this.spawnCollectible(x) : this.spawnObstacle(x);
+        const object = step.type === 'button' ? this.spawnCollectible(x) : this.spawnObstacle(x, 'soap');
         if (!object) return; // Retry if an earlier, already-passed object blocks spawning.
         this.introEncounter = { object, type: step.type };
         this.introStep += 1;
@@ -479,14 +486,7 @@ export default class Level extends Phaser.Scene {
                     this.updateHud();
                     if (this.health <= 0) {
                         this.runEnded = true;
-                        const result = {
-                            score: this.score,
-                            weight: this.weight,
-                            speedKmh: getSpeedKmh(this.buttonsCollected),
-                            totalButtons: this.buttonsCollected,
-                            maxCombo: this.maxCombo,
-                            bestPickupStreak: this.bestPickupStreak
-                        };
+                        const result = this.getRunResult(false);
                         playerData.completeRun(this.runId, this.score, result);
                         this.scene.start('end', result);
                         return;
@@ -535,6 +535,58 @@ export default class Level extends Phaser.Scene {
                 }
             }
         }
+    }
+
+    getRunResult(completed) {
+        return {
+            score: this.score, weight: this.weight,
+            speedKmh: getSpeedKmh(this.buttonsCollected),
+            totalButtons: this.buttonsCollected, maxCombo: this.maxCombo,
+            bestPickupStreak: this.bestPickupStreak, completed
+        };
+    }
+
+    beginReunion() {
+        if (this.runEnded) return;
+        this.runEnded = true;
+        this.runDistance = LEVEL_REGIONS.length * REGION_DISTANCE;
+        this.renderRegion();
+        // Freeze danger and steering as soon as the floor is reached.
+        this.input.enabled = false;
+        for (const object of [...this.obstacles, ...this.collectibles]) object.shape.destroy();
+        this.obstacles = [];
+        this.collectibles = [];
+        this.player.setAlpha(1);
+        this.player.sock.anims.stop();
+        this.player.sock.setFrame(this.player.stage * 6);
+        const result = this.getRunResult(true);
+        // Settlement is atomic and guarded by the run ID, including across reloads.
+        playerData.completeRun(this.runId, this.score, result);
+        const landingY = this.partnerSock.y;
+        this.tweens.add({ targets: this.player, x: 165, y: landingY,
+            duration: 900, ease: 'Cubic.easeIn', onComplete: () => {
+                this.tweens.add({ targets: this.player.sock, scaleX: SOCK_VISUALS.scale * 1.15,
+                    scaleY: SOCK_VISUALS.scale * 0.8, duration: 130, yoyo: true });
+                // The waiting sock rises from its resting pose and leans into its partner.
+                this.tweens.add({ targets: this.partnerSock, x: 207, y: landingY - 4,
+                    angle: 165, duration: 650, ease: 'Sine.easeInOut' });
+                this.tweens.add({ targets: this.player, x: 190, duration: 650, ease: 'Sine.easeInOut' });
+                this.tweens.add({ targets: this.player.sock, angle: 195, duration: 650,
+                    ease: 'Sine.easeInOut', onComplete: () => {
+                        const heart = this.add.text(200, landingY - 40, '♥', {
+                            fontFamily: 'sans-serif', fontSize: '30px', color: '#ff81a5',
+                            stroke: '#63233e', strokeThickness: 2
+                        }).setOrigin(0.5).setDepth(4);
+                        this.tweens.add({ targets: heart, y: landingY - 65, duration: 650, ease: 'Sine.easeOut' });
+                        this.time.delayedCall(850, () => {
+                            this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('end', result));
+                            this.cameras.main.fadeOut(700, 0, 0, 0);
+                        });
+                    }
+                });
+            }
+        });
+        this.tweens.add({ targets: this.player.sock, angle: 180, duration: 700, ease: 'Sine.easeInOut' });
     }
 
     overlapsPlayer(object) {

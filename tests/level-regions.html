@@ -13,7 +13,7 @@ const testProfile = defaultProfile();
 testProfile.sockStyle = { ...testProfile.sockStyle, bodyColor: '#182c60', accentColor: '#ed81b1', patternColor: '#f3cf4b', patternId: 'stars' };
 let saved = JSON.stringify(testProfile);
 playerData.getStorage = () => ({getItem: () => saved, setItem: (_, value) => {saved = value;}});
-let checks = 'Press 1–8 to test jumps.';
+let checks = 'Press 1–9 to test jumps.';
 const snapshot = level => JSON.stringify({runId:level.runId,score:level.score,health:level.health,weight:level.weight,buttons:level.buttonsCollected,stats:level.runStats,save:saved});
 class TestMenu extends Menu { create() { super.create(); this.scene.start('level'); } }
 class TestLevel extends Level {

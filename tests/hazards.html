@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Hazard silhouette test</title>
+<style>body{margin:0;background:#182b3d;color:white;font:12px sans-serif}#status{white-space:pre-wrap;margin:6px}#juego{width:min(100vw,400px);height:calc(100vh - 115px)}</style>
+<pre id="status">Loading isolated hazard tests…</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';
+import Boot from '../src/boot.js';
+import Menu from '../src/menu.js';
+import Level from '../src/level.js';
+import { playerData } from '../src/player-data.js';
+import { HAZARD_ART, HAZARD_POOLS } from '../src/hazards.js';
+import { REGION_DISTANCE } from '../src/level-regions.js';
+import { getFrameMask, silhouettesOverlap } from '../src/silhouette-collision.js';
+let save=null;
+playerData.getStorage = () => ({getItem:()=>save,setItem:(_,value)=>{save=value;}});
+class TestMenu extends Menu {create(){super.create();this.scene.start('level');}}
+class HazardTest extends Level {
+ create(){
+  super.create();
+  const assert=(condition,message)=>{if(!condition)throw new Error(message);};
+  try {
+   const sources = [];
+   for(let region=0;region<4;region++){
+    this.regionIndex=region;
+    const counts={};
+    for(let i=0;i<1500;i++){
+     const object=this.spawnObstacle();
+     assert(object,'Spawn failed');
+     counts[object.hazardKey]=(counts[object.hazardKey]||0)+1;
+     object.shape.destroy();this.obstacles=[];
+    }
+    for(const [key] of HAZARD_POOLS[region])assert(counts[key]>0,`Missing ${key} in region ${region}`);
+    for(const key of Object.keys(counts))assert(HAZARD_POOLS[region].some(([allowed])=>key===allowed),'Early biome leak');
+    if(region===3)assert(counts['toy-block']>750,'Pit blocks must be majority');
+    sources.push(Object.keys(counts).length);
+   }
+   const texture=this.textures.createCanvas('hazard-probe',1,1);
+   texture.context.fillStyle='white';texture.context.fillRect(0,0,1,1);texture.refresh();
+   const probe=this.add.image(0,0,'hazard-probe').setDisplaySize(.02,.02).setVisible(false);
+   let contacts=0;
+   for(const {key} of HAZARD_ART){
+    const object=this.spawnObstacle(null,key);
+    const shape=object.shape.setPosition(200,350);
+    const mask=getFrameMask(shape.frame);
+    const find=(value)=>{
+     for(let y=Math.floor(mask.height*.2);y<mask.height*.8;y++)for(let x=Math.floor(mask.width*.2);x<mask.width*.8;x++){
+      let ok=true;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)if(mask.pixels[(y+dy)*mask.width+x+dx]!==value)ok=false;
+      if(ok)return{x:x+.5-shape.displayOriginX,y:y+.5-shape.displayOriginY};
+     }
+    };
+    const solid=find(1),clear=find(0);
+    assert(solid&&clear,`Missing test samples: ${key}`);
+    for(const angle of [0,37,147]){
+     shape.setAngle(angle);
+     for(const [point,expected] of [[solid,true],[clear,false]]){
+      const world=shape.getWorldTransformMatrix().transformPoint(point.x,point.y);
+      probe.setPosition(world.x,world.y);
+      assert(silhouettesOverlap(shape,probe)===expected,`${key} alpha contact at ${angle}`);contacts++;
+     }
+    }
+    shape.destroy();this.obstacles=[];
+   }
+   probe.destroy();
+   this.runDistance=REGION_DISTANCE*3;this.regionIndex=-1;this.renderRegion();
+   for(const [i,key] of ['soap',...HAZARD_ART.map(item=>item.key)].entries()){
+    const object=this.spawnObstacle(null,key);
+    object.shape.setPosition(80+(i%3)*120,300+Math.floor(i/3)*155);
+    this.add.text(object.shape.x,object.shape.y+63,key.replaceAll('-',' ').toUpperCase(),{fontFamily:'sans-serif',fontSize:'11px',color:'#fff0c8',stroke:'#102131',strokeThickness:3}).setOrigin(.5).setDepth(12);
+   }
+   document.querySelector('#status').textContent=`PASS: actual spawns in all four biomes (${sources.join('/')} hazard types).\nPASS: ${contacts} real alpha contacts at 0°, 37°, 147°; holes stay clear.\nIsolated save; production spawn and collision methods.`;
+  } catch(error){document.querySelector('#status').textContent=`FAIL: ${error.message}`;throw error;}
+ }
+ update(){}
+}
+new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,HazardTest],audio:{noAudio:true}});
+</script></html>

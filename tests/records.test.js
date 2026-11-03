@@ -19,12 +19,12 @@ test('run records persist once with currency and combine maxima and lifetime tot
     assert.equal(p.completeRun(id, 1200, { totalButtons: 40 }), false);
     assert.deepEqual(open().load().records, {
         bestScore: 1200, maxSpeedKmh: 45.8, maxWeight: 24, maxStreak: 25,
-        totalCurrencyEarned: 1200, totalRuns: 1, totalButtons: 40, mostButtons: 40
+        totalCurrencyEarned: 1200, totalRuns: 1, completedRuns: 0, totalButtons: 40, mostButtons: 40
     });
     p.completeRun(p.beginRun(), 300, { totalButtons: 50, speedKmh: 49.7, weight: 30, maxCombo: 8 });
     assert.deepEqual(open().load().records, {
         bestScore: 1200, maxSpeedKmh: 49.7, maxWeight: 30, maxStreak: 25,
-        totalCurrencyEarned: 1500, totalRuns: 2, totalButtons: 90, mostButtons: 50
+        totalCurrencyEarned: 1500, totalRuns: 2, completedRuns: 0, totalButtons: 90, mostButtons: 50
     });
     assert.equal(p.purchaseUpgrade('fabric'), true);
     assert.equal(p.getProfile().currency, 500);
@@ -65,4 +65,30 @@ test('consecutive pickup streak takes precedence over the more forgiving scoring
     assert.equal(p.getProfile().records.maxStreak, 4);
     p.completeRun(p.beginRun(), 0, { maxCombo: 20, bestPickupStreak: 0 });
     assert.equal(p.getProfile().records.maxStreak, 4);
+});
+
+test('successful reunions count separately from deaths and persist exactly once across reloads', () => {
+    const open = fixture();
+    const p = open();
+    p.completeRun(p.beginRun(), 10, { completed: false });
+    assert.equal(p.getProfile().records.completedRuns, 0);
+    const run = p.beginRun();
+    p.completeRun(run, 123, { completed: true, totalButtons: 10 });
+    const reloaded = open();
+    assert.equal(reloaded.load().records.completedRuns, 1);
+    assert.equal(reloaded.completeRun(run, 123, { completed: true }), false);
+    assert.equal(reloaded.getProfile().currency, 133);
+    reloaded.completeRun(reloaded.beginRun(), 30, { completed: true });
+    assert.equal(open().load().records.completedRuns, 2);
+    assert.equal(open().load().records.totalRuns, 3);
+});
+
+test('old run totals never turn into victories; completion requires a true boolean', () => {
+    const old = defaultProfile();
+    delete old.records.completedRuns;
+    old.records.totalRuns = 50;
+    const p = fixture(old)();
+    assert.equal(p.load().records.completedRuns, 0);
+    p.completeRun(p.beginRun(), 0, { completed: 'true' });
+    assert.equal(p.getProfile().records.completedRuns, 0);
 });

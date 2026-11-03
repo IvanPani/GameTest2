@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Reunion completion test</title>
+<style>body{margin:0;background:#182b3d;color:white;font:12px sans-serif}#status{white-space:pre-wrap;margin:6px}#juego{width:min(100vw,400px);height:calc(100vh - 120px)}</style>
+<button id="finish">Reach Pit floor</button><button id="duplicate">Retry completion</button><pre id="status">Loading isolated save…</pre><div id="juego"></div>
+<script type="module">
+import Phaser from 'phaser';
+import Boot from '../src/boot.js';import Menu from '../src/menu.js';import Level from '../src/level.js';import End from '../src/end.js';
+import {playerData, defaultProfile, PlayerData} from '../src/player-data.js';
+import {LEVEL_REGIONS, REGION_DISTANCE} from '../src/level-regions.js';
+import {getWeight} from '../src/movement.js';
+let saved=JSON.stringify(defaultProfile()),runId,ready=false,check='Ready: click Reach Pit floor.';
+const storage={getItem:()=>saved,setItem:(_,value)=>{saved=value;}};
+playerData.getStorage=()=>storage;
+class TestMenu extends Menu{create(){super.create();if(!runId)this.scene.start('level');}}
+class TestLevel extends Level{update(time,delta){if(ready)super.update(time,delta);}}
+class TestEnd extends End{create(){super.create();const p=new PlayerData(()=>storage).load();check=this.result.completed&&p.records.completedRuns===1&&p.records.totalRuns===1&&p.currency===123?'PASS: RUN COMPLETE; reunion persisted once; +123 currency.':'FAIL: completion';}}
+const game=new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,TestLevel,TestEnd],audio:{noAudio:true}});
+document.querySelector('#finish').onclick=()=>{if(!game.scene.isActive('level'))return;const level=game.scene.getScene('level');if(level.runEnded)return;runId=level.runId;level.score=123;level.buttonsCollected=10;level.weight=getWeight(10);level.player.setButtonCount(10);level.updateHud();level.runDistance=LEVEL_REGIONS.length*REGION_DISTANCE-1;level.renderRegion();ready=true;check='Landing → reunion → fade → completion screen';};
+document.querySelector('#duplicate').onclick=()=>{const level=game.scene.getScene('level');level.beginReunion();const blocked=playerData.completeRun(runId,123,{completed:true})===false;const p=new PlayerData(()=>storage).load();check=blocked&&p.records.completedRuns===1&&p.currency===123?'PASS: duplicate completion blocked; reload keeps one reunion and 123 currency.':'FAIL: duplicate';};
+game.events.on('poststep',()=>{const p=playerData.getProfile();document.querySelector('#status').textContent=`ISOLATED SAVE\n${check}\nReunions ${p.records.completedRuns}; total runs ${p.records.totalRuns}; currency ${p.currency}`;});
+</script></html>

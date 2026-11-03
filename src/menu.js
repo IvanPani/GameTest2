@@ -442,7 +442,7 @@ export default class Menu extends Phaser.Scene {
             [295, number(records.mostButtons), 64],
             [338, number(records.totalButtons), 100],
             [382, number(records.totalCurrencyEarned), 90],
-            [426, number(records.totalRuns), 90]
+            [426, number(records.completedRuns), 90]
         ];
         for (const [nativeY, value, maxWidth] of rows) {
             const entry = this.add.text(348, paperTop + nativeY * scale, value, {
@@ -455,6 +455,8 @@ export default class Menu extends Phaser.Scene {
         createRecordNotes(this);
         art(48, 565, 'records-note-sock', 65).setAngle(-7);
         art(352, 565, 'records-note-star', 65).setAngle(8);
+        this.label(panel, 200, 559, `TOTAL RUNS: ${number(records.totalRuns)}`, 14, '#fff0c8')
+            .setStroke('#45372b', 2);
         // Save-history note stays below the paper, away from the record values.
         this.label(panel, 200, 594, 'TRACKING STARTS WITH THIS UPDATE', 10, '#fff0c8')
             .setStroke('#45372b', 2);

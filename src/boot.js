@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { HAZARD_ART, getMaskBounds } from './hazards.js';
 import { LEVEL_REGIONS } from './level-regions.js';
 import { MENU_ART, CUSTOMIZE_ART, UPGRADE_ART, RECORD_ART } from './menu-art.js';
 import { playerData } from './player-data.js';
@@ -16,6 +17,7 @@ export default class Boot extends Phaser.Scene {
     preload() {
         for (const [key, url] of [...MENU_ART, ...CUSTOMIZE_ART, ...UPGRADE_ART, ...RECORD_ART]) this.load.image(key, url);
         this.load.image('button', new URL('../assets/sprites/button.png', import.meta.url).href);
+        for (const { key, url } of HAZARD_ART) this.load.image(key, url);
         this.load.image('soap', new URL('../assets/sprites/soap.png', import.meta.url).href);
         for (const { key, url } of LEVEL_REGIONS) this.load.image(key, url);
         this.load.spritesheet(
@@ -50,6 +52,13 @@ export default class Boot extends Phaser.Scene {
         // The customized frames have the same alpha as the original spritesheet.
         // Precompute their collision silhouettes after creating the custom texture.
         for (const name of ['small', 'medium', 'large']) getFrameMask(soap.get(name));
+        for (const { key } of HAZARD_ART) {
+            const texture = this.textures.get(key);
+            const bounds = getMaskBounds(getFrameMask(texture.get()));
+            if (!bounds) throw new Error(`Hazard artwork has no solid pixels: ${key}`);
+            texture.add('object', 0, bounds.x, bounds.y, bounds.width, bounds.height);
+            getFrameMask(texture.get('object'));
+        }
         getFrameMask(this.textures.getFrame('button'));
         createHudIcons(this);
         playerData.load();

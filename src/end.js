@@ -17,12 +17,21 @@ export default class End extends Phaser.Scene {
         this.add.rectangle(200, 350, 340, 540, 0x102131, 0.98)
             .setStrokeStyle(2, 0x49677c);
 
-        this.add.text(200, 195, 'RUN OVER', {
+        this.add.text(200, 195, this.result.completed ? 'RUN COMPLETE' : 'RUN OVER', {
             fontFamily: 'Fredoka, sans-serif',
             fontSize: '36px',
             fontStyle: 'bold',
             color: '#f3f6ed'
         }).setOrigin(0.5);
+
+        if (this.result.completed) {
+            this.add.text(200, 225, 'SOCKS REUNITED!', {
+                fontFamily: 'Fredoka, sans-serif', fontSize: '16px', color: '#ffcf70'
+            }).setOrigin(0.5);
+            this.add.text(200, 451, `REUNIONS  ${playerData.getProfile().records.completedRuns}`, {
+                fontFamily: 'Fredoka, sans-serif', fontSize: '17px', color: '#ffcf70'
+            }).setOrigin(0.5);
+        }
 
         this.add.text(200, 310,
             `WEIGHT  ${this.result.weight.toFixed(1)} KG\nSPEED  ${this.result.speedKmh.toFixed(1)} KM/H\nTOTAL BUTTONS  ${this.result.totalButtons}\nMAX COMBO  ${this.result.maxCombo}`, {

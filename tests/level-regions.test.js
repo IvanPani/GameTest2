@@ -34,5 +34,12 @@ test('eight development checkpoints bracket all four areas with transition lead-
         assert.equal(getRegionProgress(end.distance).blend, 0);
         assert.ok(end.distance < (index + 1) * REGION_DISTANCE);
     }
-    for (const invalid of [0, 9, 1.5, NaN]) assert.equal(getDevCheckpoint(invalid), null);
+    for (const invalid of [0, 10, 1.5, NaN]) assert.equal(getDevCheckpoint(invalid), null);
+});
+
+test('key nine places the sock just before the reunion trigger', () => {
+    const point = getDevCheckpoint(9);
+    assert.equal(point.index, LEVEL_REGIONS.length - 1);
+    assert.equal(point.distance, LEVEL_REGIONS.length * REGION_DISTANCE - 60);
+    assert.ok(point.distance > getDevCheckpoint(8).distance);
 });

@@ -26,6 +26,9 @@ export function getRegionProgress(distance) {
 
 // End checkpoints leave a short approach before the blend, so it can be inspected.
 export function getDevCheckpoint(checkpoint) {
+    // About two seconds before landing at the initial fall speed; faster when heavy.
+    if (checkpoint === 9) return { index: LEVEL_REGIONS.length - 1,
+        distance: LEVEL_REGIONS.length * REGION_DISTANCE - 60 };
     if (!Number.isInteger(checkpoint) || checkpoint < 1 || checkpoint > LEVEL_REGIONS.length * 2) return null;
     const index = Math.floor((checkpoint - 1) / 2);
     const atEnd = checkpoint % 2 === 0;

@@ -4,7 +4,7 @@ const add = (a, b) => Math.min(Number.MAX_SAFE_INTEGER, a + b);
 
 export function defaultRecords() {
     return { bestScore: 0, maxSpeedKmh: 0, maxWeight: 0, maxStreak: 0,
-        totalCurrencyEarned: 0, totalRuns: 0, totalButtons: 0, mostButtons: 0 };
+        totalCurrencyEarned: 0, totalRuns: 0, completedRuns: 0, totalButtons: 0, mostButtons: 0 };
 }
 
 export function validateRecords(raw = {}) {
@@ -26,6 +26,7 @@ export function recordCompletedRun(previous, score, result = {}) {
         maxStreak: Math.max(records.maxStreak, count(result?.bestPickupStreak ?? result?.maxCombo)),
         totalCurrencyEarned: add(records.totalCurrencyEarned, score),
         totalRuns: add(records.totalRuns, 1),
+        completedRuns: add(records.completedRuns, result?.completed === true ? 1 : 0),
         totalButtons: add(records.totalButtons, buttons),
         mostButtons: Math.max(records.mostButtons, buttons)
     };
