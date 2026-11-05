@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import { MUSIC_TRACKS } from './music.js';
 import { GAME_AUDIO } from './game-audio.js';
 import { HAZARD_ART, getMaskBounds } from './hazards.js';
 import { LEVEL_REGIONS } from './level-regions.js';
+import { CREDITS_ART } from './credits-data.js';
 import { MENU_ART, CUSTOMIZE_ART, UPGRADE_ART, RECORD_ART } from './menu-art.js';
 import { playerData } from './player-data.js';
 import { createHudIcons } from './record-note.js';
@@ -16,8 +18,8 @@ export default class Boot extends Phaser.Scene {
     }
 
     preload() {
-        for (const [key, url] of GAME_AUDIO) this.load.audio(key, url);
-        for (const [key, url] of [...MENU_ART, ...CUSTOMIZE_ART, ...UPGRADE_ART, ...RECORD_ART]) this.load.image(key, url);
+        for (const [key, url] of [...GAME_AUDIO, ...MUSIC_TRACKS]) this.load.audio(key, url);
+        for (const [key, url] of [...MENU_ART, ...CUSTOMIZE_ART, ...UPGRADE_ART, ...RECORD_ART, ...CREDITS_ART]) this.load.image(key, url);
         this.load.image('button', new URL('../assets/sprites/button.png', import.meta.url).href);
         for (const { key, url } of HAZARD_ART) this.load.image(key, url);
         this.load.image('soap', new URL('../assets/sprites/soap.png', import.meta.url).href);
@@ -64,7 +66,6 @@ export default class Boot extends Phaser.Scene {
         getFrameMask(this.textures.getFrame('button'));
         createHudIcons(this);
         playerData.load();
-        this.sound.mute = !playerData.getProfile().settings.soundEnabled;
         applySockStyle(this, playerData.getProfile().sockStyle);
         const customStages = this.textures.get(CUSTOM_SOCK_TEXTURE);
         for (let frame = 0; frame < 30; frame += 1) getFrameMask(customStages.get(frame));

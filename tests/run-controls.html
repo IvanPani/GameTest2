@@ -5,7 +5,7 @@
 import Phaser from 'phaser';import Boot from '../src/boot.js';import Menu from '../src/menu.js';import Level from '../src/level.js';import End from '../src/end.js';import {playerData,defaultProfile} from '../src/player-data.js';
 let saved=sessionStorage.getItem('run-controls-test-save')||JSON.stringify({...defaultProfile(),currency:5000});
 playerData.getStorage=()=>({getItem:()=>saved,setItem:(_,value)=>{saved=value;sessionStorage.setItem('run-controls-test-save',value);}});
-let launched=false,baseline=null,check='Use PAUSE and SOUND beneath the run counter.';
+let launched=false,baseline=null,check='Use PAUSE below speed and weight, and SFX / MUSIC below the run counter.';
 class TestMenu extends Menu{create(){super.create();if(!launched){launched=true;this.scene.start('level');}}}
 class TestLevel extends Level{create(){super.create();this.overlapsPlayer=()=>false;}}
 const game=new Phaser.Game({type:Phaser.AUTO,width:400,height:700,parent:'juego',scale:{mode:Phaser.Scale.FIT},scene:[Boot,TestMenu,TestLevel,End]});
@@ -15,10 +15,10 @@ document.querySelector('#finish').onclick=()=>interact(level=>{level.health=1;le
 const snapshot=level=>JSON.stringify({distance:level.runDistance,elapsed:level.elapsed,wait:level.introWaitMs,x:level.player.x,score:level.score,health:level.health,objects:[...level.obstacles,...level.collectibles].map(o=>o.shape.y),frame:level.player.sock.frame.name});
 game.events.on('poststep',()=>{
  const p=playerData.getProfile();
- if(!game.scene.isActive('level')){document.querySelector('#status').textContent=`ISOLATED SAVE: wallet ${p.currency}; sound ${p.settings.soundEnabled?'ON':'OFF'}\nRun ended; earned currency is now in the wallet.`;return;}
+ if(!game.scene.isActive('level')){document.querySelector('#status').textContent=`ISOLATED SAVE: wallet ${p.currency}; SFX ${p.settings.sfxEnabled?'ON':'OFF'}; music ${p.settings.musicEnabled?'ON':'OFF'}\nRun ended; earned currency is now in the wallet.`;return;}
  const level=game.scene.getScene('level');
  if(level.runPaused){if(baseline===null)baseline=snapshot(level);else check=snapshot(level)===baseline?'PASS: gameplay, tutorial and animation frozen while HUD stays interactive.':'FAIL: paused state moved';}else{baseline=null;}
- const width=level.pauseControl.button.displayWidth+6+level.soundControl.button.displayWidth;
- document.querySelector('#status').textContent=`ISOLATED SAVE / wallet ${p.currency}; run HUD ${level.currencyText.text}\n${check}\nPaused ${level.runPaused}; sound ${p.settings.soundEnabled?'ON':'OFF'}; control width ${width}/${level.currencyBadge.displayWidth}`;
+ const width=level.audioControls.sfx.button.displayWidth+6+level.audioControls.music.button.displayWidth;
+ document.querySelector('#status').textContent=`ISOLATED SAVE / wallet ${p.currency}; run HUD ${level.currencyText.text}\n${check}\nPaused ${level.runPaused}; SFX ${p.settings.sfxEnabled?'ON':'OFF'}; music ${p.settings.musicEnabled?'ON':'OFF'}; control width ${width}/${level.currencyBadge.displayWidth}`;
 });
 </script></html>

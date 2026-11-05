@@ -13,7 +13,7 @@ export function defaultProfile() {
     return {
         schemaVersion: 1,
         currency: 0,
-        settings: { soundEnabled: true },
+        settings: { musicEnabled: true, sfxEnabled: true },
         records: defaultRecords(),
         reunions: [],
         activeRunStyle: null,
@@ -30,7 +30,10 @@ function validate(raw) {
     if (integer(raw.currency)) result.currency = raw.currency;
     result.records = validateRecords(raw.records);
     result.reunions = validateReunions(raw.reunions);
-    if (typeof raw.settings?.soundEnabled === 'boolean') result.settings.soundEnabled = raw.settings.soundEnabled;
+    for (const key of Object.keys(result.settings)) {
+        const enabled = raw.settings?.[key] ?? raw.settings?.soundEnabled;
+        if (typeof enabled === 'boolean') result.settings[key] = enabled;
+    }
     for (const key of Object.keys(result.upgrades)) {
         if (integer(raw.upgrades?.[key])) result.upgrades[key] = raw.upgrades[key];
     }
@@ -126,11 +129,16 @@ export class PlayerData {
         return true;
     }
 
-    setSoundEnabled(enabled) {
+    getAudioSettings() {
+        if (!this.loaded) this.load();
+        return { ...this.profile.settings };
+    }
+
+    setAudioEnabled(channel, enabled) {
         this.load();
-        if (typeof enabled !== 'boolean') return false;
+        if (!Object.hasOwn(this.profile.settings, channel) || typeof enabled !== 'boolean') return false;
         const next = this.getProfile();
-        next.settings.soundEnabled = enabled;
+        next.settings[channel] = enabled;
         this.commit(next);
         return true;
     }

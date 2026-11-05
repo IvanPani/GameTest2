@@ -1,3 +1,4 @@
+import { setMusic } from './music.js';
 import Phaser from 'phaser';
 import { playerData } from './player-data.js';
 import { getUpgradeProgress } from './upgrade-progress.js';
@@ -12,6 +13,7 @@ export default class End extends Phaser.Scene {
     }
 
     create() {
+        setMusic(this, 'menu');
         this.leaving = false;
         this.cameras.main.setBackgroundColor('#182b3d');
         this.add.rectangle(200, 350, 340, 540, 0x102131, 0.98)

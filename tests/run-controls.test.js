@@ -18,12 +18,18 @@ test('pause freezes animation/timers/audio, cancels steering, and resumes withou
     scene.runEnded=true;setRunPaused(scene,true);assert.equal(scene.runPaused,false);
 });
 
-test('sound preference survives reload and old saves default to enabled without changing wallet', () => {
-    let saved=JSON.stringify({...defaultProfile(),currency:5000});
-    const storage={getItem:()=>saved,setItem:(_,value)=>{saved=value;}};
-    const p=new PlayerData(()=>storage);p.load();p.setSoundEnabled(false);
-    assert.equal(new PlayerData(()=>storage).load().settings.soundEnabled,false);
-    assert.equal(p.getProfile().currency,5000);assert.equal(p.setSoundEnabled('false'),false);
-    const old=defaultProfile();delete old.settings;saved=JSON.stringify(old);
-    assert.equal(new PlayerData(()=>storage).load().settings.soundEnabled,true);
+test('music and SFX persist independently and inherit the legacy sound setting', () => {
+    const profile = { ...defaultProfile(), currency: 5000, settings: { soundEnabled: false } };
+    let saved = JSON.stringify(profile);
+    const storage = { getItem: () => saved, setItem: (_, value) => { saved = value; } };
+    const player = new PlayerData(() => storage);
+    assert.deepEqual(player.getAudioSettings(), { musicEnabled: false, sfxEnabled: false });
+    assert.equal(player.setAudioEnabled('musicEnabled', true), true);
+    assert.deepEqual(new PlayerData(() => storage).getAudioSettings(), { musicEnabled: true, sfxEnabled: false });
+    assert.equal(player.setAudioEnabled('sfxEnabled', 'true'), false);
+    assert.equal(player.setAudioEnabled('other', true), false);
+    assert.equal(player.getProfile().currency, 5000);
+    delete profile.settings;
+    saved = JSON.stringify(profile);
+    assert.deepEqual(new PlayerData(() => storage).getAudioSettings(), { musicEnabled: true, sfxEnabled: true });
 });

@@ -1,3 +1,4 @@
+import { setMusic } from './music.js';
 import Phaser from 'phaser';
 import { SPAWNING, getHazardSpawnGap } from './run-balance.js';
 import { createRunControls } from './run-controls.js';
@@ -52,6 +53,7 @@ export default class Level extends Phaser.Scene {
     }
 
     create() {
+        setMusic(this, 'gameplay');
         this.input.enabled = true;
         this.runPaused = false;
         this.time.paused = false;

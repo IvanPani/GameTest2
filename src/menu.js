@@ -1,4 +1,7 @@
+import { setMusic } from './music.js';
+import { createAudioControls } from './run-controls.js';
 import Phaser from 'phaser';
+import { createCreditsRoom } from './credits-room.js';
 import { createReunionsAlbum } from './reunions-album.js';
 import { createCustomizeIcons } from './customize-icons.js';
 import { createRecordNotes } from './record-note.js';
@@ -15,8 +18,16 @@ const LOCATIONS = Object.freeze({
     main: { x: 0, y: 0 },
     customize: { x: 0, y: -HEIGHT },
     upgrades: { x: -WIDTH, y: 0 },
-    records: { x: WIDTH, y: 0 }
+    records: { x: WIDTH, y: 0 },
+    credits: { x: WIDTH * 2, y: 0 }
 });
+const ROUTES = {
+    main: { UP: 'customize', LEFT: 'upgrades', RIGHT: 'records', DOWN: 'play' },
+    customize: { DOWN: 'main' },
+    upgrades: { RIGHT: 'main' },
+    records: { LEFT: 'main', RIGHT: 'credits' },
+    credits: { LEFT: 'records' }
+};
 const TEXT = { fontFamily: 'Fredoka, sans-serif', fontStyle: 'bold', color: '#f3f6ed' };
 
 // One spatial hub, one profile: the camera travels between the laundry rooms.
@@ -24,6 +35,7 @@ export default class Menu extends Phaser.Scene {
     constructor() { super({ key: 'menu' }); }
 
     create() {
+        setMusic(this, 'menu');
         this.location = 'main';
         this.transitioning = false;
         this.starting = false;
@@ -38,12 +50,16 @@ export default class Menu extends Phaser.Scene {
         this.createCustomize();
         this.createUpgrades();
         this.createRecords();
+        this.creditsRoom = createCreditsRoom(this, LOCATIONS.credits);
 
         this.currencyBadge = this.add.image(324, 35, 'customize-currency-badge')
             .setDisplaySize(150, 44).setScrollFactor(0).setDepth(20);
         this.currencyText = this.add.text(345, 35, '', {
             ...TEXT, fontSize: '14px', color: '#4b3027'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(21);
+        createAudioControls(this, 74, {
+            depth: 20, scrollFactor: 0, canToggle: () => !this.transitioning && !this.starting
+        });
         this.saveWarning = this.add.text(200, 675, playerData.saveError || '', {
             ...TEXT, fontSize: '16px', color: '#ffcf70', align: 'center', wordWrap: { width: 350 }
         }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
@@ -142,9 +158,9 @@ export default class Menu extends Phaser.Scene {
         if (this.transitioning || this.starting || !this.navigationSigns[this.location]?.[direction]) return;
         this.menuTouch = null;
         this.setNavigationSelection(null);
-        if (this.location !== 'main') this.navigate('main');
-        else if (direction === 'DOWN') this.startRun();
-        else this.navigate({ UP: 'customize', LEFT: 'upgrades', RIGHT: 'records' }[direction]);
+        const destination = ROUTES[this.location][direction];
+        if (destination === 'play') this.startRun();
+        else this.navigate(destination);
     }
 
     beginMenuTouch(pointer, controls) {
@@ -522,11 +538,10 @@ export default class Menu extends Phaser.Scene {
         this.label(personalSheet, 200, 562, `TOTAL RUNS: ${number(records.totalRuns)}`, 14, '#fff0c8')
             .setStroke('#45372b', 2);
         this.recordsAlbum=createReunionsAlbum(this,panel,personalSheet);
-        // Save-history note stays below the paper, away from the record values.
-        this.label(panel, 200, 594, 'TRACKING STARTS WITH THIS UPDATE', 10, '#fff0c8')
-            .setStroke('#45372b', 2);
-        this.navigationSigns.records = { LEFT: art(200, 646, 'records-back', 240)
-            .setCrop(0, 0, 466, 157) };
+        const credits = art(324, 595, 'credits-sign-right', 131);
+        this.label(panel, 313, 595, 'CREDITS', 13, '#4b3027');
+        const back = art(200, 646, 'records-back', 240).setCrop(0, 0, 466, 157);
+        this.navigationSigns.records = { LEFT: back, RIGHT: credits };
     }
 
     refreshControls() {
@@ -537,9 +552,9 @@ export default class Menu extends Phaser.Scene {
 
     navigate(destination) {
         if (this.transitioning || this.starting || destination === this.location || !Object.hasOwn(LOCATIONS, destination)) return;
-        // Side rooms connect through Main, matching the laundry-room layout.
-        if (this.location !== 'main' && destination !== 'main') return;
+        if (!Object.values(ROUTES[this.location]).includes(destination)) return;
         this.transitioning = true;
+        if (this.location === 'credits') this.creditsRoom.closeCredit();
         this.destination = destination;
         this.refreshControls();
         const { x, y } = LOCATIONS[destination];

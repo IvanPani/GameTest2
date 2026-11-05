@@ -1,3 +1,5 @@
+import { setMusicMuted } from './music.js';
+import { stopGameSounds } from './game-audio.js';
 import { playerData } from './player-data.js';
 
 export function setRunPaused(scene, paused) {
@@ -22,33 +24,49 @@ export function setRunPaused(scene, paused) {
     scene.pauseControl?.button.setTexture(paused ? 'customize-pattern-selected' : 'customize-pattern-default').setDisplaySize(72, 28);
 }
 
-export function createRunControls(scene) {
-    const control = (x, text, action) => {
-        const button = scene.add.image(x, 76, 'customize-pattern-default')
-            .setDisplaySize(72, 28).setDepth(41).setInteractive({useHandCursor:true});
-        const label = scene.add.text(x, 76, text, {
-            ...scene.hudStyle(10, '#4b3027')
-        }).setOrigin(0.5).setDepth(42);
-        button.on('pointerdown', (pointer, localX, localY, event) => {
-            event.stopPropagation();
-            if (!scene.runEnded) action();
-        });
-        return {button,label};
-    };
-    scene.pauseControl = control(285, 'PAUSE', () => setRunPaused(scene, !scene.runPaused));
-    scene.soundControl = control(363, '', () => {
-        const enabled = !playerData.getProfile().settings.soundEnabled;
-        playerData.setSoundEnabled(enabled);
-        scene.sound.mute = !enabled;
-        refreshSound();
+function hudButton(scene, x, y, text, { depth, scrollFactor = 1, canToggle }, action) {
+    const button = scene.add.image(x, y, 'customize-pattern-default')
+        .setDisplaySize(72, 28).setDepth(depth).setScrollFactor(scrollFactor)
+        .setInteractive({ useHandCursor: true });
+    const label = scene.add.text(x, y, text, {
+        fontFamily: 'Fredoka, sans-serif', fontSize: '10px', fontStyle: 'bold', color: '#4b3027'
+    }).setOrigin(0.5).setDepth(depth + 1).setScrollFactor(scrollFactor);
+    button.on('pointerdown', (pointer, localX, localY, event) => {
+        event.stopPropagation();
+        if (canToggle()) action();
     });
-    const refreshSound = () => {
-        const enabled = playerData.getProfile().settings.soundEnabled;
-        scene.sound.mute = !enabled;
-        scene.soundControl.label.setText(enabled ? 'SOUND ON' : 'SOUND OFF');
-        scene.soundControl.button.setTexture(enabled ? 'customize-pattern-selected' : 'customize-pattern-default').setDisplaySize(72,28);
+    return { button, label };
+}
+
+export function createAudioControls(scene, y, options) {
+    const createToggle = (x, channel, name, onToggle) => {
+        const refresh = () => {
+            const enabled = playerData.getAudioSettings()[channel];
+            control.label.setText(name + (enabled ? ' ON' : ' OFF'));
+            control.button.setTexture(enabled ? 'customize-pattern-selected' : 'customize-pattern-default')
+                .setDisplaySize(72, 28);
+        };
+        const control = hudButton(scene, x, y, '', options, () => {
+            const enabled = !playerData.getAudioSettings()[channel];
+            playerData.setAudioEnabled(channel, enabled);
+            onToggle(enabled);
+            refresh();
+        });
+        refresh();
+        return control;
     };
-    refreshSound();
+    return {
+        sfx: createToggle(285, 'sfxEnabled', 'SFX', enabled => {
+            if (!enabled) stopGameSounds(scene);
+        }),
+        music: createToggle(363, 'musicEnabled', 'MUSIC', enabled => setMusicMuted(scene, !enabled))
+    };
+}
+
+export function createRunControls(scene) {
+    const options = { depth: 41, canToggle: () => !scene.runEnded };
+    scene.pauseControl = hudButton(scene, 185, 92, 'PAUSE', options, () => setRunPaused(scene, !scene.runPaused));
+    scene.audioControls = createAudioControls(scene, 76, options);
     const shade = scene.add.rectangle(200,404,400,592,0x09121c,0.78).setInteractive();
     shade.on('pointerdown',(pointer,x,y,event)=>event.stopPropagation());
     scene.pauseOverlay = scene.add.container(0,0,[shade,
