@@ -13,7 +13,7 @@ export default class End extends Phaser.Scene {
     }
 
     create() {
-        setMusic(this, 'menu');
+        setMusic(this);
         this.leaving = false;
         this.cameras.main.setBackgroundColor('#182b3d');
         this.add.rectangle(200, 350, 340, 540, 0x102131, 0.98)
@@ -58,7 +58,7 @@ export default class End extends Phaser.Scene {
             fontStyle: 'bold',
             color: '#ffcf70'
         }).setOrigin(0.5);
-        this.add.text(200, 525, 'PRESS ANY KEY FOR MENU', {
+        this.add.text(200, 525, 'PRESS ENTER FOR MENU', {
             fontFamily: 'Fredoka, sans-serif',
             fontSize: '14px',
             color: '#b8c7d2'
@@ -79,11 +79,17 @@ export default class End extends Phaser.Scene {
             fontFamily: 'Fredoka, sans-serif', fontSize: '16px', color: '#ffcf70',
             align: 'center', wordWrap: { width: 350 }
         }).setOrigin(0.5);
-        this.input.once('pointerdown', this.restart, this);
-        this.input.keyboard?.once('keydown', this.restart, this);
+        const touchReturn = pointer => {
+            if (pointer.wasTouch) this.restart();
+        };
+        const keyReturn = event => {
+            if (!event.repeat) this.restart();
+        };
+        this.input.on('pointerdown', touchReturn);
+        this.input.keyboard?.on('keydown-ENTER', keyReturn);
         this.events.once('shutdown', () => {
-            this.input.off('pointerdown', this.restart, this);
-            this.input.keyboard?.off('keydown', this.restart, this);
+            this.input.off('pointerdown', touchReturn);
+            this.input.keyboard?.off('keydown-ENTER', keyReturn);
         });
     }
 

@@ -26,8 +26,7 @@ export function createReunionsAlbum(scene, panel, personalSheet) {
         const button=scene.add.text(x,y,text,{...textStyle,fontSize:`${size}px`,backgroundColor:'#f2d59f',
             padding:{x:9,y:5}}).setOrigin(.5).setInteractive({useHandCursor:true});
         parent.add(button);
-        scene.controls.push({room:'records',button});
-        button.on('pointerdown',()=>{
+        scene.registerMenuControl('records',button,()=>{
             if(scene.location!=='records'||scene.transitioning||scene.starting||album.turning||button.pageEnabled===false)return;
             action();
         });

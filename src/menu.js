@@ -1,3 +1,4 @@
+import { DEV_CHECKPOINTS_ENABLED } from './level-regions.js';
 import { setMusic } from './music.js';
 import { createAudioControls } from './run-controls.js';
 import Phaser from 'phaser';
@@ -6,7 +7,7 @@ import { createReunionsAlbum } from './reunions-album.js';
 import { createCustomizeIcons } from './customize-icons.js';
 import { createRecordNotes } from './record-note.js';
 import { playerData } from './player-data.js';
-import { UPGRADES, getRunStats } from './upgrades.js';
+import { UPGRADES, getRunStats, cycleDevUpgrades, getDevUpgradeMode, getEffectiveUpgrades } from './upgrades.js';
 import { getUpgradeProgress } from './upgrade-progress.js';
 import { SOCK_VISUALS } from './player.js';
 import { CUSTOM_SOCK_TEXTURE, applySockStyle } from './sock-skin.js';
@@ -35,13 +36,13 @@ export default class Menu extends Phaser.Scene {
     constructor() { super({ key: 'menu' }); }
 
     create() {
-        setMusic(this, 'menu');
+        setMusic(this);
         this.location = 'main';
         this.transitioning = false;
         this.starting = false;
         this.entryFinished = false;
         this.navigationSigns = {};
-        this.selectedDirection = null;
+        this.focusedButton = null;
         this.menuTouch = null;
         this.controls = [];
         this.cameras.main.setBackgroundColor('#182b3d');
@@ -57,9 +58,14 @@ export default class Menu extends Phaser.Scene {
         this.currencyText = this.add.text(345, 35, '', {
             ...TEXT, fontSize: '14px', color: '#4b3027'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(21);
-        createAudioControls(this, 74, {
-            depth: 20, scrollFactor: 0, canToggle: () => !this.transitioning && !this.starting
+        const audio = createAudioControls(this, 74, {
+            depth: 20, scrollFactor: 0,
+            canToggle: () => !this.transitioning && !this.starting
         });
+        for (const { button, activate } of Object.values(audio)) {
+            this.controls.push({ button, action: activate });
+        }
+        this.focusOutline = this.add.graphics().setScrollFactor(0).setDepth(45);
         this.saveWarning = this.add.text(200, 675, playerData.saveError || '', {
             ...TEXT, fontSize: '16px', color: '#ffcf70', align: 'center', wordWrap: { width: 350 }
         }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
@@ -68,6 +74,20 @@ export default class Menu extends Phaser.Scene {
         const keys = Object.fromEntries(navigationKeys.map(direction => [direction, event => {
             if (!event.repeat) this.selectDirection(direction);
         }]));
+        keys.ENTER = event => {
+            if (!event.repeat && !this.transitioning && !this.starting) {
+                this.focusOptions().find(option => option.button === this.focusedButton)?.action();
+            }
+        };
+        navigationKeys.push('ENTER');
+        if (DEV_CHECKPOINTS_ENABLED) {
+            keys.ZERO = keys.NUMPAD_ZERO = event => {
+                if (event.repeat || this.transitioning || this.starting) return;
+                cycleDevUpgrades();
+                if (!getDevUpgradeMode()) this.shopMessage.setText('SAVED UPGRADES RESTORED');
+                this.updateShop();
+            };
+        }
         this.input.keyboard?.addCapture(navigationKeys);
         for (const [key, handler] of Object.entries(keys)) this.input.keyboard?.on(`keydown-${key}`, handler);
         this.input.on('pointerdown', this.beginMenuTouch, this);
@@ -102,17 +122,13 @@ export default class Menu extends Phaser.Scene {
         return label;
     }
 
-    button(panel, room, x, y, text, action, width = 300) {
-        const button = this.add.text(x, y, text, {
-            ...TEXT, fontSize: '21px', backgroundColor: '#35566c', align: 'center',
-            fixedWidth: width, padding: { x: 10, y: 16 }
-        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-        panel.add(button);
-        button.on('pointerdown', () => {
-            if (this.location === room && !this.transitioning && !this.starting) action();
+    registerMenuControl(room, button, action) {
+        const control = { room, button, action };
+        this.controls.push(control);
+        button.on('pointerdown', pointer => {
+            if (pointer.wasTouch && button.input?.enabled) action();
         });
-        this.controls.push({ room, button });
-        return button;
+        return control;
     }
 
     // Hub poses share the live customized texture, but have no animation state.
@@ -134,30 +150,75 @@ export default class Menu extends Phaser.Scene {
         return sign;
     }
 
-    setNavigationSelection(direction) {
-        const signs = this.navigationSigns[this.location];
-        signs?.[this.selectedDirection]?.clearTint();
-        this.selectedDirection = direction;
-        signs?.[direction]?.setTint(0xffd078);
+    focusOptions() {
+        const controls = this.controls.filter(({ room, button }) =>
+            (!room || room === this.location) && button.input?.enabled);
+        const signs = Object.entries(this.navigationSigns[this.location] || {}).map(([direction, button]) => ({
+            button, direction, action: () => this.activateDirection(direction)
+        }));
+        return [...controls, ...signs];
+    }
+
+    focusBounds(button) {
+        const bounds = button.getBounds();
+        const camera = this.cameras.main;
+        bounds.x -= camera.scrollX * button.scrollFactorX;
+        bounds.y -= camera.scrollY * button.scrollFactorY;
+        return bounds;
+    }
+
+    setFocus(button) {
+        this.focusedButton = button;
+        this.focusOutline?.clear();
+        if (!button) return;
+        const bounds = this.focusBounds(button);
+        this.focusOutline.lineStyle(4, 0x493322)
+            .strokeRoundedRect(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6, 6)
+            .lineStyle(2, 0xffdf82)
+            .strokeRoundedRect(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6, 6);
     }
 
     selectDirection(direction) {
         if (this.transitioning || this.starting) return;
-        if (!this.navigationSigns[this.location]?.[direction]) {
-            this.setNavigationSelection(null);
+        const options = this.focusOptions();
+        const current = options.find(option => option.button === this.focusedButton);
+        const exit = options.find(option => option.direction === direction);
+        if (current && current === exit) {
+            current.action();
             return;
         }
-        if (direction !== this.selectedDirection) {
-            this.setNavigationSelection(direction);
+        if (!current) {
+            const first = exit || options.find(option => option.room === this.location) || options[0];
+            if (first) this.setFocus(first.button);
             return;
         }
-        this.activateDirection(direction);
+
+        const origin = this.focusBounds(current.button);
+        const horizontal = direction === 'LEFT' || direction === 'RIGHT';
+        const sign = direction === 'LEFT' || direction === 'UP' ? -1 : 1;
+        let closest = null;
+        let best = Infinity;
+        for (const option of options) {
+            if (option === current) continue;
+            const bounds = this.focusBounds(option.button);
+            const dx = bounds.centerX - origin.centerX;
+            const dy = bounds.centerY - origin.centerY;
+            const forward = sign * (horizontal ? dx : dy);
+            if (forward < 8) continue;
+            const score = forward + 2 * Math.abs(horizontal ? dy : dx);
+            if (score < best) {
+                closest = option;
+                best = score;
+            }
+        }
+        const next = closest || exit;
+        if (next) this.setFocus(next.button);
     }
 
     activateDirection(direction) {
         if (this.transitioning || this.starting || !this.navigationSigns[this.location]?.[direction]) return;
         this.menuTouch = null;
-        this.setNavigationSelection(null);
+        this.setFocus(null);
         const destination = ROUTES[this.location][direction];
         if (destination === 'play') this.startRun();
         else this.navigate(destination);
@@ -269,7 +330,7 @@ export default class Menu extends Phaser.Scene {
         };
         const navigationHint = window.matchMedia('(pointer: coarse)').matches
             ? 'TAP A SIGN OR SWIPE ITS WAY'
-            : 'ARROWS: SELECT, THEN PRESS AGAIN';
+            : 'ARROWS TO MOVE • ENTER TO SELECT';
         this.label(panel, 200, 614, navigationHint, 13, '#fff0c8')
             .setStroke('#45372b', 3);
         panel.add(this.add.rectangle(200, 647, 354, 29, 0x102131, 0.82));
@@ -296,11 +357,6 @@ export default class Menu extends Phaser.Scene {
         this.skinColorControls = [];
         this.skinPatternButtons = [];
         this.skinToggleButtons = [];
-        const register = element => {
-            panel.add(element);
-            this.controls.push({ room: 'customize', button: element });
-            return element;
-        };
         const choose = partial => {
             if (this.location !== 'customize' || this.transitioning || this.starting) return;
             if (!playerData.selectStyle(partial)) return;
@@ -312,8 +368,8 @@ export default class Menu extends Phaser.Scene {
             const button = this.add.image(x, y, key)
                 .setScale(width / this.textures.get(key).getSourceImage().width)
                 .setInteractive({ useHandCursor: true });
-            register(button);
-            button.on('pointerdown', action);
+            panel.add(button);
+            this.registerMenuControl('customize', button, action);
             return button;
         };
         createCustomizeIcons(this);
@@ -431,8 +487,7 @@ export default class Menu extends Phaser.Scene {
                 const y = 278 + (tier - 1) * 60;
                 const button = art(x, y, `upgrade-${id}-${tier}`, 152)
                     .setInteractive({ useHandCursor: true });
-                this.controls.push({ room: 'upgrades', button });
-                button.on('pointerdown', () => this.buyUpgrade(id, tier));
+                this.registerMenuControl('upgrades', button, () => this.buyUpgrade(id, tier));
                 const name = this.label(panel, x + 16, y - 8, names[id][tier - 1].toUpperCase(), 15, '#392e24').setLineSpacing(-2);
                 if (name.width > 100) name.setFontSize(Math.floor(15 * 100 / name.width));
                 const status = this.label(panel, x + 10, y + 16, '', 12, '#665543');
@@ -461,14 +516,18 @@ export default class Menu extends Phaser.Scene {
         const profile = playerData.getProfile();
         this.currencyText?.setText(profile.currency.toLocaleString('en-US'));
         this.saveWarning?.setY(this.location === 'customize' ? 323 : 675);
-        this.nextUpgradeGoal.setText(getUpgradeProgress(profile).message);
+        const testing = getDevUpgradeMode();
+        const upgrades = getEffectiveUpgrades(profile.upgrades);
+        this.nextUpgradeGoal.setText(testing ? this.devUpgradeMessage() : getUpgradeProgress(profile).message);
+        if (testing) this.shopMessage.setText(this.devUpgradeMessage());
         this.saveWarning?.setText(playerData.saveError || '');
         for (const item of this.upgradeTiers) {
-            const level = profile.upgrades[item.id];
+            const level = upgrades[item.id];
             const owned = item.tier <= level;
-            const next = item.tier === level + 1;
+            const next = !testing && item.tier === level + 1;
             const price = UPGRADES[item.id].costs[item.tier - 1];
-            item.button.shopEnabled = next && profile.currency >= price;
+            // Let players inspect the next tier and get a price message even when short on currency.
+            item.button.shopEnabled = next;
             item.button.setAlpha(owned || next ? 1 : 0.65);
             item.name.setAlpha(owned || next ? 1 : 0.65);
             item.check.setVisible(owned);
@@ -480,8 +539,12 @@ export default class Menu extends Phaser.Scene {
         this.refreshControls();
     }
 
+    devUpgradeMessage() {
+        return getDevUpgradeMode() === 'max' ? 'DEV: ALL UPGRADES ON' : 'DEV: ALL UPGRADES OFF';
+    }
+
     buyUpgrade(id, tier) {
-        if (this.location !== 'upgrades' || this.transitioning || this.starting) return;
+        if (getDevUpgradeMode() || this.location !== 'upgrades' || this.transitioning || this.starting) return;
         const profile = playerData.getProfile();
         if (tier !== profile.upgrades[id] + 1) return;
         const purchased = playerData.purchaseUpgrade(id, tier);
@@ -546,7 +609,10 @@ export default class Menu extends Phaser.Scene {
 
     refreshControls() {
         for (const { room, button } of this.controls) {
-            button.input.enabled = room === this.location && !this.transitioning && !this.starting && button.shopEnabled !== false && button.pageEnabled !== false;
+            button.input.enabled = (!room || room === this.location) && !this.transitioning && !this.starting && button.shopEnabled !== false && button.pageEnabled !== false;
+        }
+        if (this.focusedButton && !this.focusOptions().some(option => option.button === this.focusedButton)) {
+            this.setFocus(null);
         }
     }
 
@@ -554,6 +620,7 @@ export default class Menu extends Phaser.Scene {
         if (this.transitioning || this.starting || destination === this.location || !Object.hasOwn(LOCATIONS, destination)) return;
         if (!Object.values(ROUTES[this.location]).includes(destination)) return;
         this.transitioning = true;
+        this.setFocus(null);
         if (this.location === 'credits') this.creditsRoom.closeCredit();
         this.destination = destination;
         this.refreshControls();

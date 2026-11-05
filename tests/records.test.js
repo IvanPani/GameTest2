@@ -27,7 +27,7 @@ test('run records persist once with currency and combine maxima and lifetime tot
         totalCurrencyEarned: 1500, totalRuns: 2, completedRuns: 0, totalButtons: 90, mostButtons: 50
     });
     assert.equal(p.purchaseUpgrade('fabric'), true);
-    assert.equal(p.getProfile().currency, 500);
+    assert.equal(p.getProfile().currency, 1000);
     assert.equal(open().load().records.totalCurrencyEarned, 1500);
 });
 

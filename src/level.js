@@ -10,7 +10,7 @@ import { chooseHazard } from './hazards.js';
 import { CUSTOM_SOCK_TEXTURE } from './sock-skin.js';
 import { LEVEL_REGIONS, REGION_DISTANCE, BACKGROUND_SPEED_MULTIPLIER, getRegionProgress, getDevCheckpoint, getBackgroundLayout, getStackOffset, STACK_SEAM_OVERLAP, DEV_CHECKPOINTS_ENABLED, getDevShortcut } from './level-regions.js';
 import { playerData } from './player-data.js';
-import { getRunStats } from './upgrades.js';
+import { getRunStats, getEffectiveUpgrades } from './upgrades.js';
 import { COMBO, getComboMultiplier } from './combo.js';
 import { silhouettesOverlap } from './silhouette-collision.js';
 import { MOVEMENT, getWeight, getFallSpeed, getSpeedKmh, steer } from './movement.js';
@@ -53,12 +53,21 @@ export default class Level extends Phaser.Scene {
     }
 
     create() {
-        setMusic(this, 'gameplay');
+        const instructions = document.querySelector('.instructions');
+        if (instructions) {
+            const menuInstructions = instructions.textContent;
+            instructions.textContent = 'Steer with ← →. Pick up as many buttons as you can!';
+            this.events.once('shutdown', () => {
+                instructions.textContent = menuInstructions;
+            });
+        }
+
+        setMusic(this);
         this.input.enabled = true;
         this.runPaused = false;
         this.time.paused = false;
         this.runId = playerData.beginRun();
-        this.runStats = getRunStats(playerData.getProfile().upgrades);
+        this.runStats = getRunStats(getEffectiveUpgrades(playerData.getProfile().upgrades));
         this.runEnded = false;
         this.devInspectionRemaining = 0;
         this.cameras.main.setBackgroundColor('#182b3d');
@@ -67,6 +76,8 @@ export default class Level extends Phaser.Scene {
         this.player = new Player(this, WIDTH / 2, this.scale.height * PLAYER_Y_RATIO);
         this.player.setDepth(2);
         this.cursors = this.input.keyboard?.createCursorKeys();
+        this.comboTestKey = COMBO.keyboardTestingEnabled
+            ? this.input.keyboard?.addKey('C') : null;
         this.targetX = this.player.x;
         this.steeringVelocity = 0;
         this.pointerSteering = false;
@@ -96,14 +107,14 @@ export default class Level extends Phaser.Scene {
 
         this.dragSteering = new RelativeDrag(42, WIDTH - 42);
         const onPointerDown = pointer => {
-            if (this.runEnded || this.runPaused) return;
+            if (!pointer.wasTouch || this.runEnded || this.runPaused) return;
             const target = this.dragSteering.begin(pointer.id, pointer.x, this.player.x);
             if (target === null) return;
             this.targetX = target;
             this.pointerSteering = true;
         };
         const onPointerMove = pointer => {
-            if (this.runEnded || this.runPaused || !pointer.isDown) return;
+            if (!pointer.wasTouch || this.runEnded || this.runPaused || !pointer.isDown) return;
             const target = this.dragSteering.move(pointer.id, pointer.x);
             if (target === null) return;
             this.targetX = target;
@@ -387,8 +398,7 @@ export default class Level extends Phaser.Scene {
         this.elapsed += delta;
         this.damageTimer = Math.max(0, this.damageTimer - delta);
 
-        if (COMBO.keyboardTestingEnabled && this.cursors?.up
-            && Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+        if (this.comboTestKey && Phaser.Input.Keyboard.JustDown(this.comboTestKey)) {
             this.advanceTestMultiplier();
         }
         this.movePlayer(seconds);

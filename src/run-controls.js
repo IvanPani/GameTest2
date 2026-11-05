@@ -31,11 +31,14 @@ function hudButton(scene, x, y, text, { depth, scrollFactor = 1, canToggle }, ac
     const label = scene.add.text(x, y, text, {
         fontFamily: 'Fredoka, sans-serif', fontSize: '10px', fontStyle: 'bold', color: '#4b3027'
     }).setOrigin(0.5).setDepth(depth + 1).setScrollFactor(scrollFactor);
+    const activate = () => {
+        if (canToggle()) action();
+    };
     button.on('pointerdown', (pointer, localX, localY, event) => {
         event.stopPropagation();
-        if (canToggle()) action();
+        activate();
     });
-    return { button, label };
+    return { button, label, activate };
 }
 
 export function createAudioControls(scene, y, options) {
@@ -71,18 +74,10 @@ export function createRunControls(scene) {
     shade.on('pointerdown',(pointer,x,y,event)=>event.stopPropagation());
     scene.pauseOverlay = scene.add.container(0,0,[shade,
         scene.add.text(200,310,'PAUSED',{...scene.hudStyle(40,'#fff0c8')}).setOrigin(0.5),
-        scene.add.text(200,355,'TAP RESUME TO CONTINUE',{...scene.hudStyle(16,'#fff0c8')}).setOrigin(0.5)
+        scene.add.text(200,355,'CLICK OR TAP RESUME',{...scene.hudStyle(16,'#fff0c8')}).setOrigin(0.5)
     ]).setDepth(30).setVisible(false);
-    const togglePause = event => {
-        if (event.repeat) return;
-        setRunPaused(scene,!scene.runPaused);
-    };
-    scene.input.keyboard?.on('keydown-P',togglePause);
-    scene.input.keyboard?.on('keydown-ESC',togglePause);
-    scene.events.once('shutdown',()=>{
-        scene.input.keyboard?.off('keydown-P',togglePause);
-        scene.input.keyboard?.off('keydown-ESC',togglePause);
-        scene.time.paused=false;
-        if(scene.runPaused) scene.sound.stopAll();
+    scene.events.once('shutdown', () => {
+        scene.time.paused = false;
+        if (scene.runPaused) scene.sound.stopAll();
     });
 }

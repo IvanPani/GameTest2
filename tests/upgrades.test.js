@@ -26,7 +26,7 @@ test('each upgrade tier doubles in cost, persists, and stops at the cap', () => 
             assert.equal(saved.currency, 33000 - spent);
         }
         assert.equal(p.purchaseUpgrade(id), false);
-        assert.equal(p.getProfile().currency, 2000);
+        assert.equal(p.getProfile().currency, 17500);
         assert.equal(p.purchaseUpgrade('unknown'), false);
     }
 });
@@ -34,7 +34,7 @@ test('each upgrade tier doubles in cost, persists, and stops at the cap', () => 
 test('insufficient funds and failed saves cannot spend currency or grant upgrades', () => {
     const { open, storage } = fixture();
     const p = open();
-    p.completeRun(p.beginRun(), 999);
+    p.completeRun(p.beginRun(), 499);
     assert.equal(p.purchaseUpgrade('fabric'), false);
     p.completeRun(p.beginRun(), 1001);
     const before = p.getProfile();
@@ -86,7 +86,7 @@ test('explicit tier purchases cannot skip levels or rebuy owned tiers; tracks ad
     assert.equal(p.purchaseUpgrade('fabric', 2), true);
     const saved = open().load();
     assert.deepEqual(saved.upgrades, { fabric: 2, steering: 1 });
-    assert.equal(saved.currency, 2000);
+    assert.equal(saved.currency, 4000);
 });
 
 test('Steering tiers remove delay in 20% steps; max tier immediately turns and stops at every weight', () => {
@@ -112,10 +112,10 @@ test('each Steering upgrade increases traversal speed while the base keyboard sp
 });
 
 test('both upgrade paths use the requested prices, with no discount for later tiers', () => {
-    for (const id of ['fabric','steering']) assert.deepEqual(UPGRADES[id].costs,[1000,2000,4000,8000,16000]);
+    for (const id of ['fabric','steering']) assert.deepEqual(UPGRADES[id].costs,[500,1000,2000,4000,8000]);
     const p=fixture().open();
-    p.completeRun(p.beginRun(),2000);
+    p.completeRun(p.beginRun(),1250);
     assert.equal(p.purchaseUpgrade('steering'),true);
     assert.equal(p.purchaseUpgrade('steering'),false);
-    assert.equal(p.getProfile().currency,1000);
+    assert.equal(p.getProfile().currency,750);
 });

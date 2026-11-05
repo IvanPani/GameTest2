@@ -21,13 +21,10 @@ export const CREDIT_NOTES = Object.freeze([
         ]
     },
     {
-        id: 'music', title: 'MUSIC', teaser: 'Two lovely loops', texture: 'credits-note-music',
+        id: 'music', title: 'MUSIC', teaser: 'Background music', texture: 'credits-note-music',
         sections: [
-            { heading: 'Main Menu', name: 'Happy Clappy Loop', credit: 'OwlishMedia · CC0',
-              linkLabel: 'OpenGameArt.org', url: 'https://opengameart.org/content/happy-clappy-loop' },
-            { heading: 'Gameplay', name: 'Windfish', credit: 'Of Far Different Nature · CC BY 4.0',
-              linkLabel: 'OpenGameArt.org', url: 'https://opengameart.org/content/funky-house-bass-heavy-dnb-orchestral-dreamy-pads-hard-electro-loop-box-4',
-              artistUrl: 'https://fardifferent.carrd.co/', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/' }
+            { heading: 'Soundtrack', name: 'Happy Clappy Loop', credit: 'OwlishMedia · CC0',
+              linkLabel: 'OpenGameArt.org', url: 'https://opengameart.org/content/happy-clappy-loop' }
         ]
     },
     {

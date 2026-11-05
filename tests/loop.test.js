@@ -21,18 +21,18 @@ test('several losing runs fund a permanent upgrade, then the next run keeps owne
     assert.equal(p.getProfile().currency, 1140);
     assert.equal(getUpgradeProgress(p.getProfile()).remaining, 0);
     assert.equal(p.purchaseUpgrade('fabric'), true);
-    assert.equal(p.getProfile().currency, 140);
+    assert.equal(p.getProfile().currency, 640);
     p = open();
     p.load();
     p.beginRun();
     assert.equal(getRunStats(p.getProfile().upgrades).maxHealth, 4);
     assert.equal('weight' in p.getProfile(), false);
-    assert.equal(getUpgradeProgress(p.getProfile()).remaining, 860);
+    assert.equal(getUpgradeProgress(p.getProfile()).remaining, 0);
 });
 
 test('progress accounts for the remaining purchasable upgrade and completes cleanly', () => {
-    assert.equal(getUpgradeProgress({ currency: 100, upgrades: { fabric: 5, steering: 0 } }).remaining, 900);
-    assert.equal(getUpgradeProgress({ currency: 1000, upgrades: { fabric: 0, steering: 0 } }).remaining, 0);
+    assert.equal(getUpgradeProgress({ currency: 100, upgrades: { fabric: 5, steering: 0 } }).remaining, 400);
+    assert.equal(getUpgradeProgress({ currency: 500, upgrades: { fabric: 0, steering: 0 } }).remaining, 0);
     assert.match(getUpgradeProgress({ currency: 0, upgrades: { fabric: 5, steering: 5 } }).message, /complete/i);
 });
 

@@ -12,8 +12,7 @@ test('all credits are real data, and external music sources use precise licenses
   const songs = CREDIT_NOTES.find(item => item.id === 'music').sections;
   assert.equal(songs[0].name, 'Happy Clappy Loop');
   assert.equal(songs[0].credit, 'OwlishMedia · CC0');
-  assert.equal(songs[1].name, 'Windfish');
-  assert.equal(songs[1].credit, 'Of Far Different Nature · CC BY 4.0');
+  assert.equal(songs.length, 1);
   for (const note of CREDIT_NOTES) for (const section of note.sections) {
     assert.ok(section.heading && section.name);
     if (section.url) assert.equal(new URL(section.url).protocol, 'https:');

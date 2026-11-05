@@ -43,10 +43,8 @@ export function createCreditsRoom(scene, { x, y }) {
 
     const detailControls = [];
     const registerDetailControl = (button, action) => {
-        button.setInteractive({ useHandCursor: true }).on('pointerdown', action);
-        const control = { room: 'credits', button };
-        detailControls.push(control);
-        scene.controls.push(control);
+        button.setInteractive({ useHandCursor: true });
+        detailControls.push(scene.registerMenuControl('credits', button, action));
     };
     const addLink = (y, text, url, size = 13) => {
         const link = addText(scene, detail, 200, y, text, size, '#266d91', { fontStyle: 'bold' });
@@ -103,10 +101,9 @@ export function createCreditsRoom(scene, { x, y }) {
             .setInteractive({ useHandCursor: true, pixelPerfect: true, alphaTolerance: 20 });
         list.add(image);
         buttons.push(image);
-        scene.controls.push({ room: 'credits', button: image });
         addText(scene, list, x, y - 15, note.title, note.title.length > 10 ? 13 : 16, INK, { fontStyle: 'bold' });
         addText(scene, list, x, y + 16, note.teaser, 11, '#76584b');
-        image.on('pointerdown', () => openCredit(note));
+        scene.registerMenuControl('credits', image, () => openCredit(note));
     }
 
     // The existing navigation system tint/highlight works on image signs.

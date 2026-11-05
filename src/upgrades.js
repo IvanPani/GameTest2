@@ -1,6 +1,6 @@
 // Five permanent levels; each successive tier doubles in price.
 export const UPGRADES = Object.freeze(Object.fromEntries(['fabric', 'steering'].map(id => [id,
-    Object.freeze({ costs: Object.freeze([1000, 2000, 4000, 8000, 16000]) })
+    Object.freeze({ costs: Object.freeze([500, 1000, 2000, 4000, 8000]) })
 ])));
 
 // Each purchase removes another 20% of weight-induced steering delay.
@@ -14,4 +14,24 @@ export function getRunStats(upgrades = {}) {
         steeringDelayMultiplier: STEERING_DELAY_BY_LEVEL[level('steering')],
         steeringSpeedMultiplier: 1 + 0.1 * level('steering')
     });
+}
+
+// Session-only presets let testing bypass purchases without touching the save.
+const DEV_UPGRADE_MODES = ['saved', 'max', 'locked'];
+let devUpgradeMode = 'saved';
+
+export function cycleDevUpgrades() {
+    const index = DEV_UPGRADE_MODES.indexOf(devUpgradeMode);
+    devUpgradeMode = DEV_UPGRADE_MODES[(index + 1) % DEV_UPGRADE_MODES.length];
+}
+
+export function getDevUpgradeMode() {
+    return devUpgradeMode === 'saved' ? null : devUpgradeMode;
+}
+
+export function getEffectiveUpgrades(savedUpgrades) {
+    if (devUpgradeMode === 'saved') return savedUpgrades;
+    return Object.fromEntries(Object.entries(UPGRADES).map(([id, upgrade]) => [
+        id, devUpgradeMode === 'max' ? upgrade.costs.length : 0
+    ]));
 }

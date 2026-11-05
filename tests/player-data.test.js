@@ -35,7 +35,7 @@ test('score banks once across reloads, and a new run has no inherited weight', (
 test('purchases and style survive a new service; invalid transactions change nothing', () => {
     const f = fixture();
     const p = f.open();
-    p.completeRun(p.beginRun(), 1080);
+    p.completeRun(p.beginRun(), 580);
     assert.equal(p.purchaseUpgrade('fabric'), true);
     assert.equal(p.purchaseUpgrade('fabric'), false);
     assert.equal(p.purchaseUnlock('patterns', 'chevrons', 30), true);
