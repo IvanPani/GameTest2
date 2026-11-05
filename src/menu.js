@@ -28,7 +28,9 @@ export default class Menu extends Phaser.Scene {
         this.transitioning = false;
         this.starting = false;
         this.entryFinished = false;
-        this.artButtons = [];
+        this.navigationSigns = {};
+        this.selectedDirection = null;
+        this.menuTouch = null;
         this.controls = [];
         this.cameras.main.setBackgroundColor('#182b3d');
         this.cameras.main.setScroll(0, 0);
@@ -46,22 +48,22 @@ export default class Menu extends Phaser.Scene {
             ...TEXT, fontSize: '16px', color: '#ffcf70', align: 'center', wordWrap: { width: 350 }
         }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
 
-        const keys = {
-            UP: () => this.navigate('customize'),
-            LEFT: () => this.navigate(this.location === 'records' ? 'main' : 'upgrades'),
-            DOWN: () => { if (this.location === 'customize') this.navigate('main'); },
-            RIGHT: () => this.navigate(this.location === 'upgrades' ? 'main' : 'records'),
-            ESC: () => this.navigate('main'),
-            ENTER: () => this.startRun(),
-            SPACE: () => this.startRun()
-        };
-        const navigationKeys = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'SPACE'];
+        const navigationKeys = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+        const keys = Object.fromEntries(navigationKeys.map(direction => [direction, event => {
+            if (!event.repeat) this.selectDirection(direction);
+        }]));
         this.input.keyboard?.addCapture(navigationKeys);
         for (const [key, handler] of Object.entries(keys)) this.input.keyboard?.on(`keydown-${key}`, handler);
+        this.input.on('pointerdown', this.beginMenuTouch, this);
+        this.input.on('pointerup', this.endMenuTouch, this);
+        this.input.on('pointerupoutside', this.cancelMenuTouch, this);
         const camera = this.cameras.main;
         this.events.once('shutdown', () => {
             for (const [key, handler] of Object.entries(keys)) this.input.keyboard?.off(`keydown-${key}`, handler);
             this.input.keyboard?.removeCapture(navigationKeys);
+            this.input.off('pointerdown', this.beginMenuTouch, this);
+            this.input.off('pointerup', this.endMenuTouch, this);
+            this.input.off('pointerupoutside', this.cancelMenuTouch, this);
             camera.off('camerapancomplete', this.finishNavigation, this);
             camera.off('camerafadeoutcomplete', this.finishEntry, this);
         });
@@ -109,27 +111,77 @@ export default class Menu extends Phaser.Scene {
         return sock;
     }
 
-    artButton(panel, x, y, key, width, action) {
-        const button = this.add.image(x, y, key);
-        const scale = width / button.width;
-        button.setScale(scale).setInteractive({ useHandCursor: true, pixelPerfect: true, alphaTolerance: 24 });
-        panel.add(button);
-        this.controls.push({ room: 'main', button });
-        this.artButtons.push({ button, scale });
-        const resize = factor => {
-            this.tweens.killTweensOf(button);
-            this.tweens.add({ targets: button, scale: scale * factor, duration: 100, ease: 'Sine.easeOut' });
-        };
-        button.on('pointerover', () => {
-            if (this.location === 'main' && !this.transitioning && !this.starting) resize(1.04);
-        });
-        button.on('pointerout', () => resize(1));
-        button.on('pointerdown', () => {
-            if (this.location !== 'main' || this.transitioning || this.starting) return;
-            resize(0.96);
-            action();
-        });
-        return button;
+    navigationSign(panel, x, y, key, width) {
+        const sign = this.add.image(x, y, key);
+        sign.setScale(width / sign.width);
+        panel.add(sign);
+        return sign;
+    }
+
+    setNavigationSelection(direction) {
+        const signs = this.navigationSigns[this.location];
+        signs?.[this.selectedDirection]?.clearTint();
+        this.selectedDirection = direction;
+        signs?.[direction]?.setTint(0xffd078);
+    }
+
+    selectDirection(direction) {
+        if (this.transitioning || this.starting) return;
+        if (!this.navigationSigns[this.location]?.[direction]) {
+            this.setNavigationSelection(null);
+            return;
+        }
+        if (direction !== this.selectedDirection) {
+            this.setNavigationSelection(direction);
+            return;
+        }
+        this.activateDirection(direction);
+    }
+
+    activateDirection(direction) {
+        if (this.transitioning || this.starting || !this.navigationSigns[this.location]?.[direction]) return;
+        this.menuTouch = null;
+        this.setNavigationSelection(null);
+        if (this.location !== 'main') this.navigate('main');
+        else if (direction === 'DOWN') this.startRun();
+        else this.navigate({ UP: 'customize', LEFT: 'upgrades', RIGHT: 'records' }[direction]);
+    }
+
+    beginMenuTouch(pointer, controls) {
+        if (!pointer.wasTouch || controls.length || this.menuTouch || this.transitioning || this.starting) return;
+        this.menuTouch = { id: pointer.id, x: pointer.x, y: pointer.y };
+    }
+
+    cancelMenuTouch(pointer) {
+        if (this.menuTouch?.id === pointer.id) this.menuTouch = null;
+    }
+
+    endMenuTouch(pointer) {
+        const start = this.menuTouch;
+        if (start?.id !== pointer.id) return;
+        this.menuTouch = null;
+        if (pointer.wasCanceled) return;
+
+        const dx = pointer.x - start.x;
+        const dy = pointer.y - start.y;
+        const distance = Math.max(Math.abs(dx), Math.abs(dy));
+        if (distance >= 36) {
+            const direction = Math.abs(dx) > Math.abs(dy)
+                ? (dx < 0 ? 'LEFT' : 'RIGHT')
+                : (dy < 0 ? 'UP' : 'DOWN');
+            this.activateDirection(direction);
+        } else if (distance <= 12) {
+            const camera = this.cameras.main;
+            const down = camera.getWorldPoint(start.x, start.y);
+            const up = camera.getWorldPoint(pointer.x, pointer.y);
+            for (const [direction, sign] of Object.entries(this.navigationSigns[this.location])) {
+                const bounds = sign.getBounds();
+                if (bounds.contains(down.x, down.y) && bounds.contains(up.x, up.y)) {
+                    this.activateDirection(direction);
+                    break;
+                }
+            }
+        }
     }
 
     // Build complete panels: the supplied side-sign PNGs end mid-border/text.
@@ -191,12 +243,19 @@ export default class Menu extends Phaser.Scene {
         panel.add(this.add.text(200, 103, 'Socks to be you!', {
             ...TEXT, fontSize: '15px', color: '#fff0c8', stroke: '#45372b', strokeThickness: 3
         }).setOrigin(0.5));
-        this.artButton(panel, 200, 158, 'menu-customize', 222, () => this.navigate('customize'));
         this.createWholeMenuSign('menu-upgrades', 'UPGRADES', '←');
         this.createWholeMenuSign('menu-records', 'RECORDS', '→');
-        this.artButton(panel, 58, 312, 'menu-upgrades-whole', 100, () => this.navigate('upgrades'));
-        this.artButton(panel, 342, 312, 'menu-records-whole', 100, () => this.navigate('records'));
-        this.artButton(panel, 200, 501, 'menu-play', 159, () => this.startRun());
+        this.navigationSigns.main = {
+            UP: this.navigationSign(panel, 200, 158, 'menu-customize', 222),
+            LEFT: this.navigationSign(panel, 52, 366, 'menu-upgrades-whole', 96),
+            RIGHT: this.navigationSign(panel, 348, 366, 'menu-records-whole', 96),
+            DOWN: this.navigationSign(panel, 193, 526, 'menu-play', 145)
+        };
+        const navigationHint = window.matchMedia('(pointer: coarse)').matches
+            ? 'TAP A SIGN OR SWIPE ITS WAY'
+            : 'ARROWS: SELECT, THEN PRESS AGAIN';
+        this.label(panel, 200, 614, navigationHint, 13, '#fff0c8')
+            .setStroke('#45372b', 3);
         panel.add(this.add.rectangle(200, 647, 354, 29, 0x102131, 0.82));
         this.nextUpgradeGoal = this.label(panel, 200, 647, '', 14, '#ffcf70');
     }
@@ -213,9 +272,8 @@ export default class Menu extends Phaser.Scene {
         image(200, 171, 'customize-clothespin', 24);
         this.customizeSock = this.sock(panel, 200, 210, 1.6);
         this.createSkinControls(panel);
-        const back = image(200, 666, 'customize-back', 220).setInteractive({ useHandCursor: true });
-        back.on('pointerdown', () => this.navigate('main'));
-        this.controls.push({ room: 'customize', button: back });
+        this.navigationSigns.customize = { DOWN: image(200, 666, 'customize-back', 220) };
+        this.label(panel, 200, 690, '↓  ↓', 14, '#fff0c8').setStroke('#45372b', 3);
     }
 
     createSkinControls(panel) {
@@ -379,10 +437,8 @@ export default class Menu extends Phaser.Scene {
         panel.add(this.add.rectangle(200, 567, 366, 28, 0x102131, 0.8));
         const stats = getRunStats(playerData.getProfile().upgrades);
         this.shopMessage = this.label(panel, 200, 567, `${stats.maxHealth} HEARTS • +${Math.round((stats.steeringSpeedMultiplier - 1) * 100)}% SPEED • -${Math.round((1 - stats.steeringDelayMultiplier) * 100)}% DELAY`, 14, '#ffcf70');
-        const back = art(300, 610, 'upgrade-back', 183).setInteractive({ useHandCursor: true });
+        this.navigationSigns.upgrades = { RIGHT: art(300, 610, 'upgrade-back', 183) };
         this.label(panel, 300, 610, 'WASHING ROOM  >', 17, '#392e24');
-        back.on('pointerdown', () => this.navigate('main'));
-        this.controls.push({ room: 'upgrades', button: back });
     }
 
     updateShop() {
@@ -469,10 +525,8 @@ export default class Menu extends Phaser.Scene {
         // Save-history note stays below the paper, away from the record values.
         this.label(panel, 200, 594, 'TRACKING STARTS WITH THIS UPDATE', 10, '#fff0c8')
             .setStroke('#45372b', 2);
-        const back = art(200, 646, 'records-back', 240)
-            .setCrop(0, 0, 466, 157).setInteractive({ useHandCursor: true });
-        back.on('pointerdown', () => this.navigate('main'));
-        this.controls.push({ room: 'records', button: back });
+        this.navigationSigns.records = { LEFT: art(200, 646, 'records-back', 240)
+            .setCrop(0, 0, 466, 157) };
     }
 
     refreshControls() {
@@ -497,17 +551,11 @@ export default class Menu extends Phaser.Scene {
         this.location = this.destination;
         this.transitioning = false;
         this.saveWarning.setY(this.location === 'customize' ? 323 : 675);
-        for (const { button, scale } of this.artButtons) {
-            this.tweens.killTweensOf(button);
-            button.setScale(scale);
-        }
         this.refreshControls();
     }
 
     startRun() {
-        if (this.location !== 'main' || this.transitioning || this.entryFinished) return;
-        // Press Enter or Space again to skip the short washer-entry animation.
-        if (this.starting) { this.finishEntry(); return; }
+        if (this.location !== 'main' || this.transitioning || this.starting || this.entryFinished) return;
         this.starting = true;
         this.refreshControls();
         this.mainSock.setCrop();
