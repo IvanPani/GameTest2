@@ -243,9 +243,10 @@ export default class Menu extends Phaser.Scene {
         const dy = pointer.y - start.y;
         const distance = Math.max(Math.abs(dx), Math.abs(dy));
         if (distance >= 36) {
+            // Drag the rooms with the finger by moving the camera the other way.
             const direction = Math.abs(dx) > Math.abs(dy)
-                ? (dx < 0 ? 'LEFT' : 'RIGHT')
-                : (dy < 0 ? 'UP' : 'DOWN');
+                ? (dx < 0 ? 'RIGHT' : 'LEFT')
+                : (dy < 0 ? 'DOWN' : 'UP');
             this.activateDirection(direction);
         } else if (distance <= 12) {
             const camera = this.cameras.main;
